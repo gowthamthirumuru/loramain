@@ -1,0 +1,30 @@
+# --- Python Basics ---
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --- Virtual Environments (Keep these local!) ---
+venv/
+.venv/
+env/
+
+# --- Operating System Files ---
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Mac (If you or a teammate use Mac later)
+.DS_Store
+
+# --- IDE Settings (Optional, but good practice) ---
+.vscode/
+.idea/
+
+# --- Project Specific Runtime Data ---
+# We don't want to upload old logs to GitHub
+logs/*.log
+
+# We don't want to upload the temporary database if you create one
+*.json
+!config/anchors.json  # EXCEPTION: Do NOT ignore the anchors config!

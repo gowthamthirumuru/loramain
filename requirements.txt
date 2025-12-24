@@ -1,0 +1,4 @@
+numpy
+# The following are only needed on the Raspberry Pi
+spidev; sys_platform == 'linux'
+RPi.GPIO; sys_platform == 'linux'
