@@ -1,0 +1,20 @@
+{
+    "MASTER": {
+        "id": "node_master",
+        "x": 0.0,
+        "y": 0.0,
+        "role": "master"
+    },
+    "ANCHOR_2": {
+        "id": "node_relay_1",
+        "x": 100.0,
+        "y": 0.0,
+        "role": "relay"
+    },
+    "ANCHOR_3": {
+        "id": "node_relay_2",
+        "x": 50.0,
+        "y": 86.6,
+        "role": "relay"
+    }
+}
