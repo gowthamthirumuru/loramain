@@ -65,7 +65,7 @@ class SX126X:
         # 2. Setup Serial
         try:
             # Raspberry Pi 3/4 uses /dev/ttyS0 or /dev/ttyAMA0
-            self.ser = serial.Serial(serial_port, 9600)
+            self.ser = serial.Serial("/dev/serial0", 9600, timeout=1)
             self.ser.flushInput()
         except Exception as e:
             print(f"[WARNING] Serial HW not found: {e}")

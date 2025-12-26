@@ -21,7 +21,7 @@ def run_master():
     
     while True:
         # Check if code freezes here
-        # print(".", end="", flush=True) # Uncomment this if you suspect total freeze
+        print(".", end="", flush=True)
         
         # 1. RECEIVE DATA
         msg, rssi = lora.receive() 
