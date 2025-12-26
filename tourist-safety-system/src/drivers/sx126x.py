@@ -1,158 +1,305 @@
-import sys
+# This file is used for LoRa and Raspberry pi4B related issues 
+
+import RPi.GPIO as GPIO
+import serial
 import time
 
-# --- ENVIRONMENT DETECTION (Windows vs Pi) ---
-try:
-    import RPi.GPIO as GPIO
-    import serial
-    IS_HARDWARE = True
-except (ImportError, ModuleNotFoundError):
-    IS_HARDWARE = False
-    # --- MOCK CLASSES FOR WINDOWS SIMULATION ---
-    class MockGPIO:
-        BCM = "BCM"
-        OUT = "OUT"
-        LOW = 0
-        HIGH = 1
-        @staticmethod
-        def setmode(mode): pass
-        @staticmethod
-        def setwarnings(flag): pass
-        @staticmethod
-        def setup(pin, mode): pass
-        @staticmethod
-        def output(pin, state): pass
-        @staticmethod
-        def cleanup(): pass
+class sx126x:
 
-    class MockSerial:
-        def __init__(self, port, baudrate): pass
-        def flushInput(self): pass
-        def write(self, data): print(f"[SIMULATION] Radio Sent: {data}")
-        def inWaiting(self): return 0
-        def read(self, count): return b''
-        def close(self): pass
-
-    # Assign Mocks
-    GPIO = MockGPIO()
-    serial = type('obj', (object,), {'Serial': MockSerial})
-
-class SX126X:
-    # Pin Definitions (From your file)
     M0 = 22
     M1 = 27
-    
-    # Configuration Constants
-    REG_ADDH = 0x00
-    REG_ADDL = 0x00
-    REG_NETID = 0x00
-    REG_LR_FREQ = 868 # Default Frequency
-    
-    # Packet Configuration (RSSI Enabled by default)
-    # We use 0xC2 to save settings temporarily (RAM)
-    # The crucial byte is index 9: 0x43 (Default) + 0x80 (Enable RSSI) = 0xC3
-    CFG_REG = [0xC2, 0x00, 0x09, 0x00, 0x00, 0x00, 0x62, 0x00, 0x12, 0xC3, 0x00, 0x00]
+    # if the header is 0xC0, then the LoRa register settings dont lost when it poweroff, and 0xC2 will be lost. 
+    # cfg_reg = [0xC0,0x00,0x09,0x00,0x00,0x00,0x62,0x00,0x17,0x43,0x00,0x00]
+    cfg_reg = [0xC2,0x00,0x09,0x00,0x00,0x00,0x62,0x00,0x12,0x43,0x00,0x00]
+    get_reg = bytes(12)
+    rssi = False
+    addr = 65535
+    serial_n = ""
+    addr_temp = 0
 
-    def __init__(self, serial_port="/dev/ttyS0"):
-        self.is_hardware = IS_HARDWARE
-        
-        # 1. Setup GPIO
+    #
+    # start frequence of two lora module
+    #
+    # E22-400T22S           E22-900T22S
+    # 410~493MHz      or    850~930MHz
+    start_freq = 850
+
+    #
+    # offset between start and end frequence of two lora module
+    #
+    # E22-400T22S           E22-900T22S
+    # 410~493MHz      or    850~930MHz
+    offset_freq = 18
+
+    # power = 22
+    # air_speed =2400
+
+    SX126X_UART_BAUDRATE_1200 = 0x00
+    SX126X_UART_BAUDRATE_2400 = 0x20
+    SX126X_UART_BAUDRATE_4800 = 0x40
+    SX126X_UART_BAUDRATE_9600 = 0x60
+    SX126X_UART_BAUDRATE_19200 = 0x80
+    SX126X_UART_BAUDRATE_38400 = 0xA0
+    SX126X_UART_BAUDRATE_57600 = 0xC0
+    SX126X_UART_BAUDRATE_115200 = 0xE0
+
+    SX126X_PACKAGE_SIZE_240_BYTE = 0x00
+    SX126X_PACKAGE_SIZE_128_BYTE = 0x40
+    SX126X_PACKAGE_SIZE_64_BYTE = 0x80
+    SX126X_PACKAGE_SIZE_32_BYTE = 0xC0
+
+    SX126X_Power_22dBm = 0x00
+    SX126X_Power_17dBm = 0x01
+    SX126X_Power_13dBm = 0x02
+    SX126X_Power_10dBm = 0x03
+
+    lora_air_speed_dic = {
+        1200:0x01,
+        2400:0x02,
+        4800:0x03,
+        9600:0x04,
+        19200:0x05,
+        38400:0x06,
+        62500:0x07
+    }
+
+    lora_power_dic = {
+        22:0x00,
+        17:0x01,
+        13:0x02,
+        10:0x03
+    }
+
+    lora_buffer_size_dic = {
+        240:SX126X_PACKAGE_SIZE_240_BYTE,
+        128:SX126X_PACKAGE_SIZE_128_BYTE,
+        64:SX126X_PACKAGE_SIZE_64_BYTE,
+        32:SX126X_PACKAGE_SIZE_32_BYTE
+    }
+
+    def __init__(self,serial_num,freq,addr,power,rssi,air_speed=2400,\
+                 net_id=0,buffer_size = 240,crypt=0,\
+                 relay=False,lbt=False,wor=False):
+        self.rssi = rssi
+        self.addr = addr
+        self.freq = freq
+        self.serial_n = serial_num
+        self.power = power
+        # Initial the GPIO for M0 and M1 Pin
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
-        GPIO.setup(self.M0, GPIO.OUT)
-        GPIO.setup(self.M1, GPIO.OUT)
+        GPIO.setup(self.M0,GPIO.OUT)
+        GPIO.setup(self.M1,GPIO.OUT)
+        GPIO.output(self.M0,GPIO.LOW)
+        GPIO.output(self.M1,GPIO.HIGH)
+
+        # The hardware UART of Pi3B+,Pi4B is /dev/ttyS0
+        self.ser = serial.Serial(serial_num,9600)
+        self.ser.flushInput()
+        self.set(freq,addr,power,rssi,air_speed,net_id,buffer_size,crypt,relay,lbt,wor)
+
+    def set(self,freq,addr,power,rssi,air_speed=2400,\
+            net_id=0,buffer_size = 240,crypt=0,\
+            relay=False,lbt=False,wor=False):
+        self.send_to = addr
+        self.addr = addr
+        # We should pull up the M1 pin when sets the module
+        GPIO.output(self.M0,GPIO.LOW)
+        GPIO.output(self.M1,GPIO.HIGH)
+        time.sleep(0.1)
+
+        low_addr = addr & 0xff
+        high_addr = addr >> 8 & 0xff
+        net_id_temp = net_id & 0xff
+        if freq > 850:
+            freq_temp = freq - 850
+            self.start_freq = 850
+            self.offset_freq = freq_temp
+        elif freq >410:
+            freq_temp = freq - 410
+            self.start_freq  = 410
+            self.offset_freq = freq_temp
         
-        # 2. Setup Serial
-        try:
-            # Raspberry Pi 3/4 uses /dev/ttyS0 or /dev/ttyAMA0
-            self.ser = serial.Serial("/dev/serial0", 9600, timeout=1)
-            self.ser.flushInput()
-        except Exception as e:
-            print(f"[WARNING] Serial HW not found: {e}")
-            if not IS_HARDWARE:
-                self.ser = serial.Serial("COM1", 9600)
+        air_speed_temp = self.lora_air_speed_dic.get(air_speed,None)
+        # if air_speed_temp != None
+        
+        buffer_size_temp = self.lora_buffer_size_dic.get(buffer_size,None)
+        # if air_speed_temp != None:
+        
+        power_temp = self.lora_power_dic.get(power,None)
+        #if power_temp != None:
 
-        # 3. Configure Mode (M0=0, M1=1 -> Configuration)
-        GPIO.output(self.M0, GPIO.LOW)
-        GPIO.output(self.M1, GPIO.HIGH)
-        time.sleep(0.1)
-
-        # 4. Apply Settings
-        if IS_HARDWARE:
-            self._configure()
+        if rssi:
+            # enable print rssi value 
+            rssi_temp = 0x80
         else:
-            print("[SIMULATION] SX126x Configured (RSSI Enabled)")
+            # disable print rssi value
+            rssi_temp = 0x00        
 
-        # 5. Switch to Normal Mode (M0=0, M1=0)
-        GPIO.output(self.M0, GPIO.LOW)
-        GPIO.output(self.M1, GPIO.LOW)
-        time.sleep(0.1)
-        print("SX126x Radio Ready.")
-
-    def _configure(self):
-        """ Internal method to write hex config to module """
-        self.ser.write(bytes(self.CFG_REG))
-        time.sleep(0.5)
+        # get crypt
+        l_crypt = crypt & 0xff
+        h_crypt = crypt >> 8 & 0xff
+        
+        if relay==False:
+            self.cfg_reg[3] = high_addr
+            self.cfg_reg[4] = low_addr
+            self.cfg_reg[5] = net_id_temp
+            self.cfg_reg[6] = self.SX126X_UART_BAUDRATE_9600 + air_speed_temp
+            # 
+            # it will enable to read noise rssi value when add 0x20 as follow
+            # 
+            self.cfg_reg[7] = buffer_size_temp + power_temp + 0x20
+            self.cfg_reg[8] = freq_temp
+            #
+            # it will output a packet rssi value following received message
+            # when enable eighth bit with 06H register(rssi_temp = 0x80)
+            #
+            self.cfg_reg[9] = 0x43 + rssi_temp
+            self.cfg_reg[10] = h_crypt
+            self.cfg_reg[11] = l_crypt
+        else:
+            self.cfg_reg[3] = 0x01
+            self.cfg_reg[4] = 0x02
+            self.cfg_reg[5] = 0x03
+            self.cfg_reg[6] = self.SX126X_UART_BAUDRATE_9600 + air_speed_temp
+            # 
+            # it will enable to read noise rssi value when add 0x20 as follow
+            # 
+            self.cfg_reg[7] = buffer_size_temp + power_temp + 0x20
+            self.cfg_reg[8] = freq_temp
+            #
+            # it will output a packet rssi value following received message
+            # when enable eighth bit with 06H register(rssi_temp = 0x80)
+            #
+            self.cfg_reg[9] = 0x03 + rssi_temp
+            self.cfg_reg[10] = h_crypt
+            self.cfg_reg[11] = l_crypt
         self.ser.flushInput()
 
-    def send(self, data):
-        """ Sends string data """
-        # Ensure Normal Mode
-        GPIO.output(self.M0, GPIO.LOW)
-        GPIO.output(self.M1, GPIO.LOW)
-        time.sleep(0.01) # Short delay for stability
-        
-        if isinstance(data, str):
-            data = data.encode()
-            
-        self.ser.write(data)
-        
-    def receive(self):
-        """ 
-        Checks for data. 
-        Returns: (data_string, rssi_int) or (None, None)
-        """
-        if self.is_hardware:
-            # --- REAL HARDWARE LOGIC ---
+        for i in range(2):
+            self.ser.write(bytes(self.cfg_reg))
+            r_buff = 0
+            time.sleep(0.2)
             if self.ser.inWaiting() > 0:
-                time.sleep(0.1) # Wait for full packet
+                time.sleep(0.1)
                 r_buff = self.ser.read(self.ser.inWaiting())
-                
-                if len(r_buff) > 1:
-                    # Last byte is RSSI (because we enabled it)
-                    rssi_byte = r_buff[-1]
-                    rssi_val = -(256 - rssi_byte)
-                    
-                    try:
-                        msg = r_buff[:-1].decode('utf-8', errors='ignore')
-                        return msg, rssi_val
-                    except:
-                        return None, None
-            return None, None
+                if r_buff[0] == 0xC1:
+                    pass
+                    # print("parameters setting is :",end='')
+                    # for i in self.cfg_reg:
+                        # print(hex(i),end=' ')
+                        
+                    # print('\r\n')
+                    # print("parameters return is  :",end='')
+                    # for i in r_buff:
+                        # print(hex(i),end=' ')
+                    # print('\r\n')
+                else:
+                    pass
+                    #print("parameters setting fail :",r_buff)
+                break
+            else:
+                print("setting fail,setting again")
+                self.ser.flushInput()
+                time.sleep(0.2)
+                print('\x1b[1A',end='\r')
+                if i == 1:
+                    print("setting fail,Press Esc to Exit and run again")
+                    # time.sleep(2)
+                    # print('\x1b[1A',end='\r')
+
+        GPIO.output(self.M0,GPIO.LOW)
+        GPIO.output(self.M1,GPIO.LOW)
+        time.sleep(0.1)
+
+    def get_settings(self):
+        # the pin M1 of lora HAT must be high when enter setting mode and get parameters
+        GPIO.output(M1,GPIO.HIGH)
+        time.sleep(0.1)
+        
+        # send command to get setting parameters
+        self.ser.write(bytes([0xC1,0x00,0x09]))
+        if self.ser.inWaiting() > 0:
+            time.sleep(0.1)
+            self.get_reg = self.ser.read(self.ser.inWaiting())
+        
+        # check the return characters from hat and print the setting parameters
+        if self.get_reg[0] == 0xC1 and self.get_reg[2] == 0x09:
+            fre_temp = self.get_reg[8]
+            addr_temp = self.get_reg[3] + self.get_reg[4]
+            air_speed_temp = self.get_reg[6] & 0x03
+            power_temp = self.get_reg[7] & 0x03
             
+            print("Frequence is {0}.125MHz.",fre_temp)
+            print("Node address is {0}.",addr_temp)
+            print("Air speed is {0} bps"+ lora_air_speed_dic.get(None,air_speed_temp))
+            print("Power is {0} dBm" + lora_power_dic.get(None,power_temp))
+            GPIO.output(M1,GPIO.LOW)
+
+#
+# the data format like as following
+# "node address,frequence,payload"
+# "20,868,Hello World"
+    def send(self,data):
+        GPIO.output(self.M1,GPIO.LOW)
+        GPIO.output(self.M0,GPIO.LOW)
+        time.sleep(0.1)
+
+        self.ser.write(data)
+        # if self.rssi == True:
+            # self.get_channel_rssi()
+        time.sleep(0.1)
+
+
+# REPLACE the old 'receive' method in src/drivers/sx126x.py with this:
+    def receive(self):
+        """
+        Modified to RETURN data (message, rssi) instead of printing it.
+        """
+        if self.ser.inWaiting() > 0:
+            time.sleep(0.1) # Wait for full packet
+            r_buff = self.ser.read(self.ser.inWaiting())
+            
+            # Verify packet length (needs at least header + payload + rssi)
+            if len(r_buff) < 4:
+                return None, None
+            
+            # 1. EXTRACT RSSI
+            # In this chip's UART mode, the last byte is usually the RSSI
+            # Formula: -(256 - value)
+            raw_rssi = r_buff[-1] 
+            rssi_val = -(256 - raw_rssi)
+            
+            # 2. EXTRACT MESSAGE
+            # Bytes 0-2 are usually headers (Address High, Low, Freq). 
+            # The message starts at index 3 and ends before the RSSI byte.
+            try:
+                # Try to decode as text
+                msg_data = r_buff[3:-1]
+                msg = msg_data.decode('utf-8', errors='ignore')
+            except:
+                # If binary, keep as string representation
+                msg = str(r_buff[3:-1])
+            
+            return msg, rssi_val
         else:
-            # --- WINDOWS SIMULATION (SMARTER) ---
-            # Randomly simulate hearing PINGS and REPORTS so Master can calculate
-            import random
-            
-            # 20% chance to receive a packet per loop
-            if random.random() < 0.2: 
-                sim_rssi = random.randint(-90, -40) # The signal strength the anchor heard
-                link_rssi = random.randint(-60, -30) # Strong signal between anchors
-                
-                dice = random.randint(1, 3)
-                
-                if dice == 1:
-                    # Simulate hearing the Tourist directly
-                    return "TOURIST:PING", sim_rssi
-                    
-                elif dice == 2:
-                    # Simulate hearing a Report from Anchor 2
-                    # Msg format: REPORT:ANCHOR_ID:RSSI_VAL
-                    return f"REPORT:ANCHOR_2:{sim_rssi}", link_rssi
-                    
-                elif dice == 3:
-                    # Simulate hearing a Report from Anchor 3
-                    return f"REPORT:ANCHOR_3:{sim_rssi}", link_rssi
-                    
             return None, None
+
+    def get_channel_rssi(self):
+        GPIO.output(self.M1,GPIO.LOW)
+        GPIO.output(self.M0,GPIO.LOW)
+        time.sleep(0.1)
+        self.ser.flushInput()
+        self.ser.write(bytes([0xC0,0xC1,0xC2,0xC3,0x00,0x02]))
+        time.sleep(0.5)
+        re_temp = bytes(5)
+        if self.ser.inWaiting() > 0:
+            time.sleep(0.1)
+            re_temp = self.ser.read(self.ser.inWaiting())
+        if re_temp[0] == 0xC1 and re_temp[1] == 0x00 and re_temp[2] == 0x02:
+            print("the current noise rssi value: -{0}dBm".format(256-re_temp[3]))
+            # print("the last receive packet rssi value: -{0}dBm".format(256-re_temp[4]))
+        else:
+            # pass
+            print("receive rssi value fail")
+            # print("receive rssi value fail: ",re_temp)

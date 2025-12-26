@@ -1,32 +1,33 @@
 import time
-import random
 import sys
-import os
+from src.drivers.sx126x import sx126x
+# Import your math helper
+from src.utils.math_helper import calculate_distance
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from src.drivers.sx126x import SX126X
-
-def run_relay(anchor_id):
-    print(f"--- STARTING RELAY NODE ({anchor_id}) ---")
+def run_relay(relay_id):
+    print(f"[{relay_id}] Anchor Active. Listening...")
     
-    lora = SX126X()
+    # SETUP: Address 0 (Receiver Mode)
+    # rssi=True is CRITICAL to enable signal strength reading
+    node = sx126x(serial_num='/dev/ttyS0', freq=865, addr=0, power=22, rssi=True)
     
-    while True:
-        # 1. Listen for packets
-        msg, rssi = lora.receive()
-        
-        if msg and "PING" in msg:
-            print(f"[Rx] Heard Tourist! RSSI: {rssi}dBm")
+    try:
+        while True:
+            # 1. Get Packet & RSSI from our modified driver
+            message, rssi = node.receive()
             
-            # 2. Avoid Collisions
-            # Anchor 2 waits 0.5s, Anchor 3 waits 1.0s (Approx)
-            delay = 0.5 if "RELAY_1" in anchor_id else 1.0
-            time.sleep(delay)
+            # 2. If we got a valid message...
+            if message:
+                # Calculate distance using your math helper
+                distance = calculate_distance(rssi)
+                
+                print(f"[{relay_id}] TARGET DETECTED!")
+                print(f"   Signal: {rssi} dBm")
+                print(f"   Distance: {distance} meters")
+                print("-" * 30)
+                
+            # Small delay to prevent CPU overload
+            time.sleep(0.1)
             
-            # 3. Send Report to Master
-            # Format: "REPORT:MY_ID:DETECTED_RSSI"
-            report_payload = f"REPORT:{anchor_id}:{rssi}"
-            lora.send(report_payload)
-            print(f"[Tx] Relayed: {report_payload}")
-            
-        time.sleep(0.1) # Small CPU rest
+    except KeyboardInterrupt:
+        print(f"[{relay_id}] Stopping...")

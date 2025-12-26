@@ -1,25 +1,26 @@
 import time
 import sys
-import os
+# Import the driver class
+from src.drivers.sx126x import sx126x
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from src.drivers.sx126x import SX126X
-
-def run_tourist(node_id="TOURIST_01"):
-    print(f"--- STARTING TOURIST NODE ({node_id}) ---")
+def run_tourist():
+    print("[Tourist] Initializing LoRa Tracker...")
     
-    # Initialize Hardware
-    lora = SX126X()
+    # SETUP: Freq 865MHz (Change to 915/868 if needed), Address 100
+    # M0=22, M1=27 are handled inside sx126x automatically
+    node = sx126x(serial_num='/dev/ttyS0', freq=865, addr=100, power=22, rssi=False)
     
-    seq_num = 0
-    
-    while True:
-        # Create Payload: "PING:TOURIST_ID:SEQUENCE"
-        payload = f"PING:{node_id}:{seq_num}"
-        
-        print(f"[Tx] Sending: {payload}")
-        lora.send(payload)
-        
-        seq_num += 1
-        time.sleep(5) # Broadcast every 5 seconds
+    try:
+        while True:
+            # MESSAGE FORMAT: "ID,STATUS"
+            message = "ID:100,SOS"
+            
+            # Send the message
+            node.send(message.encode())
+            print(f"[Tourist] Ping Sent: {message}")
+            
+            # Wait 2 seconds (don't flood the channel)
+            time.sleep(2)
+            
+    except KeyboardInterrupt:
+        print("[Tourist] Stopping...")
