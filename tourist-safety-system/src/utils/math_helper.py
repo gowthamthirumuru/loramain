@@ -69,6 +69,13 @@ class MathEngine:
             print("ERROR: Anchors are collinear! Cannot trilaterate.")
             return None
 
+
+# Alias for backward compatibility
+def calculate_distance(rssi):
+    """Alias for MathEngine.rssi_to_distance()"""
+    return MathEngine.rssi_to_distance(rssi)
+
+
 # --- TEST BLOCK (Runs only on your Laptop) ---
 if __name__ == "__main__":
     print("--- Running Math Simulation on Windows ---")

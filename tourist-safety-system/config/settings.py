@@ -23,23 +23,32 @@ LORA_PINS = {
 
 # LoRa Radio Settings
 LORA_SETTINGS = {
-    "FREQUENCY": 868,      # Change to 915 for US/Aus or 433 for Asia (check your module)
+    "FREQUENCY": 865,      # 865 MHz for India (850-930 MHz band for E22-900T22S)
     "TX_POWER": 22,        # Max power (dBm)
     "BANDWIDTH": 125.0,    # kHz
     "SPREADING_FACTOR": 9, # Higher = More Range, Slower Speed
     "CODING_RATE": 5       # 4/5
 }
 
-# --- 3. Math & Calibration Constants ---
+# --- 3. Serial Port Configuration ---
+# Raspberry Pi serial port (most Pi models use /dev/ttyS0, some use /dev/ttyAMA0)
+SERIAL_PORT = "/dev/ttyS0"
+
+# --- 4. Math & Calibration Constants ---
 # Path Loss Exponent (N): 
 # 2.0 = Open Space (Line of Sight)
-# 3.0 = Urban / Trees (Likely your case)
-ENV_FACTOR_N = 3.0 
+# 3.0 = Urban / Trees / Light obstacles
+# 4.0 = Indoor / Walls / Heavy obstacles (USE THIS FOR ROOM TESTING!)
+ENV_FACTOR_N = 4.0  # ← CHANGED FOR INDOOR TESTING
 
-# Measured RSSI at 1 meter distance (You must calibrate this later!)
-RSSI_AT_1M = -45 
+# Measured RSSI at 1 meter distance 
+# TODO: Calibrate this on your first test!
+# Steps: 1) Place tourist 1 meter from anchor
+#        2) Read the RSSI value from relay output
+#        3) Update this value
+RSSI_AT_1M = -40  # ← Typical indoor value (may need adjustment) 
 
-# --- 4. Load Anchors ---
+# --- 5. Load Anchors ---
 def get_anchors():
     """Reads the anchors.json file and returns the dictionary."""
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
