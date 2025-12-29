@@ -56,9 +56,12 @@ def run_relay(relay_id):
                     
                     # 3. Forward RSSI to Master Node
                     # STAGGERED DELAY: Wait based on address to prevent RF collision
-                    # ANCHOR_2 (addr=2) waits 0.2s, ANCHOR_3 (addr=3) waits 0.4s
-                    stagger_delay = addr * 0.2
-                    print(f"   Waiting {stagger_delay}s to avoid collision...")
+                    # ANCHOR_2 (addr=2) waits ~0.5s, ANCHOR_3 (addr=3) waits ~1.0s
+                    import random
+                    base_delay = addr * 0.3  # 0.6s for ANCHOR_2, 0.9s for ANCHOR_3
+                    jitter = random.uniform(0, 0.2)  # Add 0-200ms random jitter
+                    stagger_delay = base_delay + jitter
+                    print(f"   Waiting {stagger_delay:.2f}s to avoid collision...")
                     time.sleep(stagger_delay)
                     
                     report = f"REPORT:{relay_id}:{median_rssi}"
