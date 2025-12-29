@@ -8,132 +8,157 @@ from src.drivers.sx126x import sx126x
 from src.utils.math_helper import MathEngine
 from config.settings import get_anchors, SERIAL_PORT, LORA_SETTINGS
 
+# ANSI Color Codes for terminal output
+class Colors:
+    HEADER = '\033[95m'      # Magenta
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    WHITE = '\033[97m'
+    BOLD = '\033[1m'
+    DIM = '\033[2m'
+    RESET = '\033[0m'
+
+def clear_screen():
+    os.system('clear' if os.name != 'nt' else 'cls')
+
+def print_header():
+    print(f"\n{Colors.CYAN}{Colors.BOLD}")
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║          🛰️  LoRa Tourist Positioning System  🛰️          ║")
+    print("║                    MASTER NODE ACTIVE                     ║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    print(f"{Colors.RESET}")
+
+def print_status(anchors_received, total=3):
+    bar = "█" * anchors_received + "░" * (total - anchors_received)
+    color = Colors.GREEN if anchors_received == total else Colors.YELLOW
+    print(f"\r{Colors.DIM}Signal Collection: {color}[{bar}] {anchors_received}/{total}{Colors.RESET}", end='', flush=True)
+
+def print_location(x, y, distances):
+    print(f"\n\n{Colors.GREEN}{Colors.BOLD}")
+    print("┌──────────────────────────────────────────────────────────┐")
+    print(f"│  📍 TOURIST LOCATED                                      │")
+    print("├──────────────────────────────────────────────────────────┤")
+    print(f"│                                                          │")
+    print(f"│     X = {x:>8.2f} meters                                 │")
+    print(f"│     Y = {y:>8.2f} meters                                 │")
+    print(f"│                                                          │")
+    print("├──────────────────────────────────────────────────────────┤")
+    print(f"│  {Colors.DIM}Distances:{Colors.GREEN}{Colors.BOLD}                                              │")
+    for anchor, dist in distances.items():
+        print(f"│    • {anchor}: {dist:.2f}m                                       │"[:60] + "│")
+    print("└──────────────────────────────────────────────────────────┘")
+    print(f"{Colors.RESET}")
+
+def print_waiting():
+    print(f"\n{Colors.DIM}⏳ Waiting for signals...{Colors.RESET}", end='\r')
+
 def run_master():
-    print("--- STARTING MASTER NODE (ANCHOR 1) ---")
+    clear_screen()
+    print_header()
     
     # Get frequency from centralized config
     freq = LORA_SETTINGS.get("FREQUENCY", 868)
     
-    # Initialize LoRa: addr=1 for Master, rssi=True to get signal strength
+    # Initialize LoRa
+    print(f"{Colors.DIM}Initializing LoRa at {freq} MHz...{Colors.RESET}")
     lora = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=1, power=22, rssi=True)
     anchors = get_anchors()
     
-    # Validate required anchors exist
+    # Validate required anchors
     required_anchors = ["MASTER", "ANCHOR_2", "ANCHOR_3"]
     missing = [a for a in required_anchors if a not in anchors]
     if missing:
-        print(f"[ERROR] Missing anchor config: {missing}")
-        print("Please check config/anchors.json")
+        print(f"{Colors.RED}[ERROR] Missing anchor config: {missing}{Colors.RESET}")
         return
     
-    print(f"[INFO] Loaded anchors: {list(anchors.keys())}")
-    print(f"[INFO] Using frequency: {freq} MHz")
+    print(f"{Colors.GREEN}✓ Ready! Awaiting tourist signals...{Colors.RESET}\n")
     
     current_readings = {}
     last_ping_time = time.time()
-    
-    print("[INFO] Entering Main Loop... Waiting for signals.")
+    location_count = 0
     
     try:
         while True:
-            # 1. RECEIVE DATA
+            # Receive data
             msg, rssi = lora.receive() 
             
             if msg:
-                # Case A: Direct hit from Tourist (PING message)
+                # Direct PING from tourist
                 if "PING" in msg:
-                    print(f"\n[Rx] Direct Hit from Tourist! RSSI: {rssi} dBm")
                     current_readings["MASTER"] = rssi
                     last_ping_time = time.time()
                 
-                # Case B: Report from Relay
+                # Report from relay
                 elif "REPORT" in msg:
                     try:
                         parts = msg.split(":")
-                        sender_id = parts[1] 
+                        sender_id = parts[1]
                         reported_rssi = int(parts[2])
-                        
-                        print(f"[Rx] Report from {sender_id}: {reported_rssi} dBm")
                         current_readings[sender_id] = reported_rssi
-                    except (IndexError, ValueError) as e:
-                        print(f"[Err] Bad Packet Format: {msg} - {e}")
+                    except:
+                        pass
 
-            # 2. STATUS UPDATE (only when we have some data)
-            if len(current_readings) > 0 and len(current_readings) < 3:
-                print(f"[Status] Readings: {list(current_readings.keys())} ({len(current_readings)}/3)", end='\r')
+            # Update status bar
+            if len(current_readings) > 0:
+                print_status(len(current_readings))
 
-            # 3. TRIANGULATE when we have all 3 readings
+            # Triangulate when we have all 3 readings
             if len(current_readings) >= 3:
-                print("\n" + "="*50)
-                print("--- TRIANGULATING POSITION ---")
+                location_count += 1
                 
                 tri_input = []
                 distances = {}
                 
-                # Add Master reading
-                if "MASTER" in current_readings:
-                    dist = MathEngine.rssi_to_distance(current_readings["MASTER"])
-                    distances["MASTER"] = dist
-                    tri_input.append({
-                        'x': anchors["MASTER"]["x"], 
-                        'y': anchors["MASTER"]["y"], 
-                        'r': dist
-                    })
-                
-                # Add Anchor 2 reading
-                if "ANCHOR_2" in current_readings:
-                    dist = MathEngine.rssi_to_distance(current_readings["ANCHOR_2"])
-                    distances["ANCHOR_2"] = dist
-                    tri_input.append({
-                        'x': anchors["ANCHOR_2"]["x"], 
-                        'y': anchors["ANCHOR_2"]["y"], 
-                        'r': dist
-                    })
-
-                # Add Anchor 3 reading
-                if "ANCHOR_3" in current_readings:
-                    dist = MathEngine.rssi_to_distance(current_readings["ANCHOR_3"])
-                    distances["ANCHOR_3"] = dist
-                    tri_input.append({
-                        'x': anchors["ANCHOR_3"]["x"], 
-                        'y': anchors["ANCHOR_3"]["y"], 
-                        'r': dist
-                    })
-
-                # Print distances
-                dist_str = ", ".join([f"{k}: {v:.2f}m" for k, v in distances.items()])
-                print(f"Distances: {dist_str}")
+                # Build trilateration input
+                for anchor_id in ["MASTER", "ANCHOR_2", "ANCHOR_3"]:
+                    if anchor_id in current_readings:
+                        dist = MathEngine.rssi_to_distance(current_readings[anchor_id])
+                        distances[anchor_id] = dist
+                        tri_input.append({
+                            'x': anchors[anchor_id]["x"], 
+                            'y': anchors[anchor_id]["y"], 
+                            'r': dist
+                        })
 
                 # Calculate position
                 if len(tri_input) >= 3:
                     result = MathEngine.trilaterate(tri_input)
                     
                     if result:
-                        print(f"✅ TOURIST LOCATED AT: X={result[0]:.2f}, Y={result[1]:.2f}")
+                        print_location(result[0], result[1], distances)
+                        
+                        # Also output as JSON for software integration
+                        location_data = {
+                            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+                            "location": {"x": result[0], "y": result[1]},
+                            "distances": distances,
+                            "reading_count": location_count
+                        }
+                        # Uncomment to see JSON output:
+                        # print(f"{Colors.DIM}JSON: {json.dumps(location_data)}{Colors.RESET}")
                     else:
-                        print("❌ Calculation Failed (Math Error - check if anchors are collinear)")
-                else:
-                    print("❌ Not enough valid readings for triangulation")
+                        print(f"\n{Colors.RED}❌ Calculation failed{Colors.RESET}")
                 
                 current_readings = {}
-                print("="*50)
-                print("--- WAITING FOR NEXT PING ---\n")
+                print_waiting()
 
-            # 4. TIMEOUT: Clear stale data after 10 seconds
-            if time.time() - last_ping_time > 10 and len(current_readings) > 0:
-                print("\n[Info] Data timeout (10s). Clearing incomplete readings.")
+            # Timeout handling
+            if time.time() - last_ping_time > 15 and len(current_readings) > 0:
+                print(f"\n{Colors.RED}⚠ Timeout - clearing incomplete data{Colors.RESET}")
                 current_readings = {}
                 last_ping_time = time.time()
                 
             time.sleep(0.01)
             
     except KeyboardInterrupt:
-        print("\n[Master] Shutting down...")
+        print(f"\n\n{Colors.YELLOW}Shutting down...{Colors.RESET}")
     finally:
-        # Cleanup GPIO on exit
         try:
             import RPi.GPIO as GPIO
             GPIO.cleanup()
-            print("[Master] GPIO cleaned up.")
         except:
             pass

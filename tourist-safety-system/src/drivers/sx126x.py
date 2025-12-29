@@ -266,19 +266,14 @@ class sx126x:
     def receive(self):
         """
         Receive data from LoRa module.
-        In TRANSPARENT mode, data format is: [PAYLOAD...] + [RSSI_BYTE]
-        No header bytes - just raw payload followed by RSSI.
+        Data format: [PAYLOAD...] + [RSSI_BYTE]
         """
         if self.ser.inWaiting() > 0:
             time.sleep(0.1)  # Wait for full packet
             r_buff = self.ser.read(self.ser.inWaiting())
             
-            # DEBUG: Print raw bytes received
-            print(f"[DEBUG RX] Raw bytes ({len(r_buff)}): {r_buff.hex()}")
-            
             # Need at least 2 bytes (1 char + RSSI)
             if len(r_buff) < 2:
-                print(f"[DEBUG RX] Packet too short, ignoring")
                 return None, None
             
             # RSSI is the LAST byte
@@ -287,14 +282,11 @@ class sx126x:
             rssi_val = -(256 - raw_rssi)
             
             # MESSAGE is everything EXCEPT the last byte (RSSI)
-            # In transparent mode, there are NO header bytes
             try:
-                msg_data = r_buff[:-1]  # All bytes except RSSI
+                msg_data = r_buff[:-1]
                 msg = msg_data.decode('utf-8', errors='ignore')
-                print(f"[DEBUG RX] Decoded msg: '{msg}' | RSSI: {rssi_val} dBm")
-            except Exception as e:
+            except Exception:
                 msg = str(r_buff[:-1])
-                print(f"[DEBUG RX] Binary data, could not decode: {e}")
             
             return msg, rssi_val
         else:
