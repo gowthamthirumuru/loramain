@@ -240,14 +240,26 @@ class sx126x:
 # the data format like as following
 # "node address,frequence,payload"
 # "20,868,Hello World"
-    def send(self,data):
-        GPIO.output(self.M1,GPIO.LOW)
-        GPIO.output(self.M0,GPIO.LOW)
+    def send(self, data):
+        """
+        Send data via LoRa. 
+        For broadcast, we use address 0xFFFF (all nodes receive).
+        The data format is: [ADDR_H, ADDR_L, CHANNEL, PAYLOAD...]
+        """
+        GPIO.output(self.M1, GPIO.LOW)
+        GPIO.output(self.M0, GPIO.LOW)
         time.sleep(0.1)
 
-        self.ser.write(data)
-        # if self.rssi == True:
-            # self.get_channel_rssi()
+        # Build the packet with broadcast address header
+        # 0xFF, 0xFF = Broadcast to all nodes
+        # self.offset_freq = Channel offset from start frequency
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        
+        # Create packet: [ADDR_HIGH, ADDR_LOW, CHANNEL, ...PAYLOAD]
+        packet = bytes([0xFF, 0xFF, self.offset_freq]) + data
+        
+        self.ser.write(packet)
         time.sleep(0.1)
 
 
@@ -260,8 +272,12 @@ class sx126x:
             time.sleep(0.1) # Wait for full packet
             r_buff = self.ser.read(self.ser.inWaiting())
             
+            # DEBUG: Print raw bytes received
+            print(f"[DEBUG RX] Raw bytes ({len(r_buff)}): {r_buff.hex()}")
+            
             # Verify packet length (needs at least header + payload + rssi)
             if len(r_buff) < 4:
+                print(f"[DEBUG RX] Packet too short, ignoring")
                 return None, None
             
             # 1. EXTRACT RSSI
@@ -277,6 +293,7 @@ class sx126x:
                 # Try to decode as text
                 msg_data = r_buff[3:-1]
                 msg = msg_data.decode('utf-8', errors='ignore')
+                print(f"[DEBUG RX] Decoded msg: '{msg}' | RSSI: {rssi_val}")
             except:
                 # If binary, keep as string representation
                 msg = str(r_buff[3:-1])
