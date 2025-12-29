@@ -242,61 +242,54 @@ class sx126x:
 # "20,868,Hello World"
     def send(self, data):
         """
-        Send data via LoRa. 
-        For broadcast, we use address 0xFFFF (all nodes receive).
-        The data format is: [ADDR_H, ADDR_L, CHANNEL, PAYLOAD...]
+        Send data via LoRa in TRANSPARENT mode.
+        Just send raw payload - no headers needed.
         """
         GPIO.output(self.M1, GPIO.LOW)
         GPIO.output(self.M0, GPIO.LOW)
         time.sleep(0.1)
 
-        # Build the packet with broadcast address header
-        # 0xFF, 0xFF = Broadcast to all nodes
-        # self.offset_freq = Channel offset from start frequency
+        # In transparent mode, just send raw data
         if isinstance(data, str):
             data = data.encode('utf-8')
         
-        # Create packet: [ADDR_HIGH, ADDR_LOW, CHANNEL, ...PAYLOAD]
-        packet = bytes([0xFF, 0xFF, self.offset_freq]) + data
-        
-        self.ser.write(packet)
+        self.ser.write(data)
         time.sleep(0.1)
 
 
-# REPLACE the old 'receive' method in src/drivers/sx126x.py with this:
+# Receive method for transparent transmission mode
     def receive(self):
         """
-        Modified to RETURN data (message, rssi) instead of printing it.
+        Receive data from LoRa module.
+        In TRANSPARENT mode, data format is: [PAYLOAD...] + [RSSI_BYTE]
+        No header bytes - just raw payload followed by RSSI.
         """
         if self.ser.inWaiting() > 0:
-            time.sleep(0.1) # Wait for full packet
+            time.sleep(0.1)  # Wait for full packet
             r_buff = self.ser.read(self.ser.inWaiting())
             
             # DEBUG: Print raw bytes received
             print(f"[DEBUG RX] Raw bytes ({len(r_buff)}): {r_buff.hex()}")
             
-            # Verify packet length (needs at least header + payload + rssi)
-            if len(r_buff) < 4:
+            # Need at least 2 bytes (1 char + RSSI)
+            if len(r_buff) < 2:
                 print(f"[DEBUG RX] Packet too short, ignoring")
                 return None, None
             
-            # 1. EXTRACT RSSI
-            # In this chip's UART mode, the last byte is usually the RSSI
-            # Formula: -(256 - value)
-            raw_rssi = r_buff[-1] 
+            # RSSI is the LAST byte
+            # Formula: -(256 - value) to convert to dBm
+            raw_rssi = r_buff[-1]
             rssi_val = -(256 - raw_rssi)
             
-            # 2. EXTRACT MESSAGE
-            # Bytes 0-2 are usually headers (Address High, Low, Freq). 
-            # The message starts at index 3 and ends before the RSSI byte.
+            # MESSAGE is everything EXCEPT the last byte (RSSI)
+            # In transparent mode, there are NO header bytes
             try:
-                # Try to decode as text
-                msg_data = r_buff[3:-1]
+                msg_data = r_buff[:-1]  # All bytes except RSSI
                 msg = msg_data.decode('utf-8', errors='ignore')
-                print(f"[DEBUG RX] Decoded msg: '{msg}' | RSSI: {rssi_val}")
-            except:
-                # If binary, keep as string representation
-                msg = str(r_buff[3:-1])
+                print(f"[DEBUG RX] Decoded msg: '{msg}' | RSSI: {rssi_val} dBm")
+            except Exception as e:
+                msg = str(r_buff[:-1])
+                print(f"[DEBUG RX] Binary data, could not decode: {e}")
             
             return msg, rssi_val
         else:
