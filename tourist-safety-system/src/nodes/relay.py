@@ -55,8 +55,13 @@ def run_relay(relay_id):
                     print(f"   Distance: {distance:.2f} meters")
                     
                     # 3. Forward RSSI to Master Node
+                    # STAGGERED DELAY: Wait based on address to prevent RF collision
+                    # ANCHOR_2 (addr=2) waits 0.2s, ANCHOR_3 (addr=3) waits 0.4s
+                    stagger_delay = addr * 0.2
+                    print(f"   Waiting {stagger_delay}s to avoid collision...")
+                    time.sleep(stagger_delay)
+                    
                     report = f"REPORT:{relay_id}:{median_rssi}"
-                    time.sleep(0.05)  # Small delay before transmitting
                     node.send(report.encode())
                     print(f"   ✓ Forwarded to Master: {report}")
                     print("-" * 40)
