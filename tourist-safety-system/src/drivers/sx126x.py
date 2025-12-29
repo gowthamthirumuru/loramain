@@ -242,18 +242,23 @@ class sx126x:
 # "20,868,Hello World"
     def send(self, data):
         """
-        Send data via LoRa in TRANSPARENT mode.
-        Just send raw payload - no headers needed.
+        Send data via LoRa in FIXED transmission mode.
+        Format: [ADDR_H, ADDR_L, CHANNEL, PAYLOAD...]
+        Use 0xFFFF for broadcast to all nodes.
         """
         GPIO.output(self.M1, GPIO.LOW)
         GPIO.output(self.M0, GPIO.LOW)
         time.sleep(0.1)
 
-        # In transparent mode, just send raw data
         if isinstance(data, str):
             data = data.encode('utf-8')
         
-        self.ser.write(data)
+        # Fixed mode requires address header for transmission
+        # 0xFF, 0xFF = Broadcast address (all nodes receive)
+        # self.offset_freq = Channel offset
+        packet = bytes([0xFF, 0xFF, self.offset_freq]) + data
+        
+        self.ser.write(packet)
         time.sleep(0.1)
 
 
