@@ -54,13 +54,11 @@ class BackendClient:
         Returns:
             bool: True if successful, False otherwise
         """
-        # Convert local X,Y to lat/lng
-        lat, lng = self._convert_to_gps(x, y)
-        
+        # Send raw X,Y coordinates (meters)
         payload = {
             "device_id": device_id,
-            "lat": lat,
-            "lng": lng,
+            "x": x,
+            "y": y,
             "rssi": rssi_avg,
             "sos_flag": sos_flag
         }
@@ -75,7 +73,7 @@ class BackendClient:
                 )
                 
                 if response.status_code == 200:
-                    print(f"[Backend] ✅ Location sent: ({lat:.6f}, {lng:.6f})")
+                    print(f"[Backend] ✅ Location sent: X={x:.2f}m, Y={y:.2f}m")
                     self.connected = True
                     return True
                 elif response.status_code == 404:

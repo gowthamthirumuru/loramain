@@ -15,9 +15,10 @@ const { SOCKET_EVENTS, TOURIST_STATUS } = require('../config/constants');
 /**
  * Update Location from Gateway
  * POST /api/location/update
+ * Accepts X,Y coordinates in meters (from trilateration)
  */
 exports.updateLocation = asyncHandler(async (req, res) => {
-  const { device_id, lat, lng, rssi, sos_flag } = req.body;
+  const { device_id, x, y, rssi, sos_flag } = req.body;
 
   // Find tourist with this device
   const tourist = await Tourist.findOne({
@@ -29,19 +30,19 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     throw new ApiError(404, 'Device not associated with active tourist', 'DEVICE_NOT_FOUND');
   }
 
-  // Save to location history
+  // Save to location history (using x,y as coordinates)
   const newLog = new LocationLog({
     device_id,
     tourist_id: tourist._id,
-    latitude: lat,
-    longitude: lng,
+    x: x,
+    y: y,
     rssi,
     is_sos: sos_flag || false
   });
   await newLog.save();
 
   // Update tourist's current status
-  tourist.last_location = { lat, lng };
+  tourist.last_location = { x, y };
   tourist.last_seen = new Date();
 
   if (sos_flag) {
@@ -51,10 +52,10 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     const sosAlert = await SOSAlert.create({
       tourist_id: tourist._id,
       device_id,
-      location: { lat, lng }
+      location: { x, y }
     });
 
-    logger.logSOS(tourist.name, device_id, { lat, lng });
+    logger.logLocation(device_id, x, y, true);
 
     // Emit SOS alert via Socket.IO
     try {
@@ -65,7 +66,7 @@ exports.updateLocation = asyncHandler(async (req, res) => {
         tourist_name: tourist.name,
         phone: tourist.phone,
         emergency_contact: tourist.emergency_contact,
-        location: { lat, lng },
+        location: { x, y },
         timestamp: new Date().toISOString()
       });
     } catch (err) {
@@ -83,8 +84,8 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     io.emit(SOCKET_EVENTS.LOCATION_UPDATE, {
       tourist_id: tourist._id,
       name: tourist.name,
-      lat,
-      lng,
+      x,
+      y,
       rssi,
       status: tourist.status,
       sos: sos_flag || false,
@@ -94,11 +95,11 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     logger.error('Socket emit error:', err.message);
   }
 
-  logger.logLocation(device_id, lat, lng, sos_flag);
+  logger.logLocation(device_id, x, y, sos_flag);
 
   res.json(successResponse({
     tourist_id: tourist._id,
-    location: { lat, lng },
+    location: { x, y },
     status: tourist.status
   }, 'Location updated successfully'));
 });

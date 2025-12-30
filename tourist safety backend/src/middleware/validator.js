@@ -5,9 +5,9 @@
 
 const { ApiError } = require('./errorHandler');
 
-// Validate location update from gateway
+// Validate location update from gateway (X,Y coordinates in meters)
 const validateLocationUpdate = (req, res, next) => {
-    const { device_id, lat, lng } = req.body;
+    const { device_id, x, y } = req.body;
     const errors = [];
 
     // Required fields
@@ -15,30 +15,21 @@ const validateLocationUpdate = (req, res, next) => {
         errors.push('device_id is required');
     }
 
-    if (lat === undefined || lat === null) {
-        errors.push('lat (latitude) is required');
+    if (x === undefined || x === null) {
+        errors.push('x coordinate is required');
     }
 
-    if (lng === undefined || lng === null) {
-        errors.push('lng (longitude) is required');
+    if (y === undefined || y === null) {
+        errors.push('y coordinate is required');
     }
 
     // Type validation
-    if (lat !== undefined && (typeof lat !== 'number' || isNaN(lat))) {
-        errors.push('lat must be a valid number');
+    if (x !== undefined && (typeof x !== 'number' || isNaN(x))) {
+        errors.push('x must be a valid number');
     }
 
-    if (lng !== undefined && (typeof lng !== 'number' || isNaN(lng))) {
-        errors.push('lng must be a valid number');
-    }
-
-    // Range validation for coordinates
-    if (typeof lat === 'number' && (lat < -90 || lat > 90)) {
-        errors.push('lat must be between -90 and 90');
-    }
-
-    if (typeof lng === 'number' && (lng < -180 || lng > 180)) {
-        errors.push('lng must be between -180 and 180');
+    if (y !== undefined && (typeof y !== 'number' || isNaN(y))) {
+        errors.push('y must be a valid number');
     }
 
     // RSSI validation (optional but if provided, must be valid)

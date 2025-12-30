@@ -67,13 +67,13 @@ logger.logRequest = (req, message = 'Request received') => {
     });
 };
 
-// Add location update logging helper
-logger.logLocation = (deviceId, lat, lng, sos = false) => {
+// Add location update logging helper (X,Y coordinates)
+logger.logLocation = (deviceId, x, y, sos = false) => {
     const level = sos ? 'warn' : 'info';
     logger[level](`Location update: ${deviceId}`, {
         device_id: deviceId,
-        lat,
-        lng,
+        x,
+        y,
         sos
     });
 };
