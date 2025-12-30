@@ -8,7 +8,8 @@ import sys
 import os
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from config.settings import IS_RASPBERRY_PI
+from src.drivers.sx126x import sx126x
+from config.settings import SERIAL_PORT, LORA_SETTINGS, IS_RASPBERRY_PI
 
 # ============ CONFIGURATION ============
 # Each tourist device should have a unique ID
@@ -19,56 +20,63 @@ DEVICE_ID = os.environ.get('DEVICE_ID', 'DEV001')
 PING_INTERVAL = 2
 
 # SOS button GPIO pin (Raspberry Pi)
-SOS_PIN = 17  # Change to your actual pin
+SOS_PIN = 17
+
+# ANSI Color Codes
+class Colors:
+    CYAN = '\033[96m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    RED = '\033[91m'
+    DIM = '\033[2m'
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
 
 
 def run_tourist():
-    print("=" * 50)
-    print("   LoRa TOURIST DEVICE")
-    print("=" * 50)
-    print(f"Device ID: {DEVICE_ID}")
-    print(f"Ping Interval: {PING_INTERVAL}s")
-    print("=" * 50)
+    # Clear screen
+    os.system('clear' if os.name != 'nt' else 'cls')
+    
+    print(f"\n{Colors.CYAN}{Colors.BOLD}")
+    print("╔════════════════════════════════════════╗")
+    print("║   🚶  TOURIST TRACKER DEVICE           ║")
+    print("╚════════════════════════════════════════╝")
+    print(f"{Colors.RESET}")
+    
+    print(f"Device ID: {Colors.GREEN}{DEVICE_ID}{Colors.RESET}")
+    
+    freq = LORA_SETTINGS.get("FREQUENCY", 865)
+    print(f"{Colors.DIM}Frequency: {freq} MHz{Colors.RESET}")
+    print(f"{Colors.DIM}Ping Interval: {PING_INTERVAL}s{Colors.RESET}")
     
     # Initialize LoRa
     if IS_RASPBERRY_PI:
-        from src.drivers.sx126x import sx126x
         import RPi.GPIO as GPIO
+        node = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=100, power=22, rssi=False)
+        print(f"{Colors.GREEN}✓ LoRa initialized{Colors.RESET}")
         
-        # Setup LoRa
-        node = sx126x(
-            serial_num='/dev/ttyS0',
-            freq=865,
-            addr=100,
-            power=22,
-            rssi=False
-        )
-        print("[LoRa] ✅ Hardware initialized")
-        
-        # Setup SOS button (optional)
+        # Setup SOS button
         try:
             GPIO.setmode(GPIO.BCM)
             GPIO.setup(SOS_PIN, GPIO.IN, pull_up_down=GPIO.PUD_DOWN)
-            print(f"[SOS] ✅ Button configured on GPIO {SOS_PIN}")
+            print(f"{Colors.GREEN}✓ SOS button on GPIO {SOS_PIN}{Colors.RESET}")
             sos_button_available = True
         except Exception as e:
-            print(f"[SOS] ⚠️ Button not configured: {e}")
+            print(f"{Colors.YELLOW}⚠ SOS button not configured: {e}{Colors.RESET}")
             sos_button_available = False
     else:
         node = None
         sos_button_available = False
-        print("[LoRa] ⚠️ Running in simulation mode (not on Pi)")
+        print(f"{Colors.YELLOW}⚠ Running in simulation mode (not on Pi){Colors.RESET}")
     
-    # State
-    is_sos = False
+    print(f"\n{Colors.GREEN}{Colors.BOLD}✓ Tracker active!{Colors.RESET}\n")
+    
     ping_count = 0
-    
-    print("\n[System] Starting broadcast loop...")
-    print("[System] Press Ctrl+C to stop\n")
+    is_sos = False
     
     try:
         while True:
-            # Check SOS button (if available)
+            # Check SOS button
             if sos_button_available:
                 try:
                     import RPi.GPIO as GPIO
@@ -76,28 +84,25 @@ def run_tourist():
                 except:
                     pass
             
+            ping_count += 1
+            
             # Build message
             if is_sos:
                 message = f"SOS:{DEVICE_ID}"
-                print(f"🚨 [{ping_count}] SOS SIGNAL SENT: {message}")
+                print(f"\r{Colors.RED}🚨 SOS #{ping_count}: {message}{Colors.RESET}  ", end='', flush=True)
             else:
                 message = f"PING:{DEVICE_ID}"
-                print(f"📍 [{ping_count}] Ping sent: {message}")
+                print(f"\r{Colors.GREEN}📡 Ping #{ping_count}: {message}{Colors.RESET}  ", end='', flush=True)
             
             # Transmit
             if node:
                 node.send(message.encode())
-            else:
-                # Simulation mode - just print
-                print(f"   (Simulation - not actually transmitted)")
             
-            ping_count += 1
             time.sleep(PING_INTERVAL)
             
     except KeyboardInterrupt:
-        print("\n\n[System] Stopping tourist device...")
-        
-        # Cleanup GPIO if on Pi
+        print(f"\n\n{Colors.YELLOW}Stopped after {ping_count} pings.{Colors.RESET}")
+    finally:
         if IS_RASPBERRY_PI:
             try:
                 import RPi.GPIO as GPIO
@@ -107,62 +112,54 @@ def run_tourist():
 
 
 def run_tourist_with_sos_test():
-    """
-    Test mode: Simulates SOS trigger after a few pings.
-    Use this to test the SOS flow without hardware button.
-    """
-    print("=" * 50)
-    print("   LoRa TOURIST DEVICE (SOS TEST MODE)")
-    print("=" * 50)
+    """Test mode: Simulates SOS trigger after a few pings."""
+    os.system('clear' if os.name != 'nt' else 'cls')
+    
+    print(f"\n{Colors.CYAN}{Colors.BOLD}")
+    print("╔════════════════════════════════════════╗")
+    print("║   🚶  TOURIST DEVICE (SOS TEST MODE)   ║")
+    print("╚════════════════════════════════════════╝")
+    print(f"{Colors.RESET}")
     print(f"Device ID: {DEVICE_ID}")
-    print("Will send SOS after 5 normal pings")
-    print("=" * 50)
+    print(f"{Colors.YELLOW}Will send SOS on pings 5-7{Colors.RESET}\n")
+    
+    freq = LORA_SETTINGS.get("FREQUENCY", 865)
     
     if IS_RASPBERRY_PI:
-        from src.drivers.sx126x import sx126x
-        node = sx126x(
-            serial_num='/dev/ttyS0',
-            freq=865,
-            addr=100,
-            power=22,
-            rssi=False
-        )
+        node = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=100, power=22, rssi=False)
     else:
         node = None
-        print("[LoRa] ⚠️ Simulation mode")
+        print(f"{Colors.YELLOW}⚠ Simulation mode{Colors.RESET}")
     
     ping_count = 0
     
     try:
         while True:
-            # Trigger SOS after 5 pings
-            is_sos = ping_count >= 5 and ping_count < 8
+            ping_count += 1
+            is_sos = 5 <= ping_count <= 7
             
             if is_sos:
                 message = f"SOS:{DEVICE_ID}"
-                print(f"🚨 [{ping_count}] SOS: {message}")
+                print(f"{Colors.RED}🚨 [{ping_count}] SOS: {message}{Colors.RESET}")
             else:
                 message = f"PING:{DEVICE_ID}"
-                print(f"📍 [{ping_count}] Ping: {message}")
+                print(f"{Colors.GREEN}📡 [{ping_count}] Ping: {message}{Colors.RESET}")
             
             if node:
                 node.send(message.encode())
             
-            ping_count += 1
             time.sleep(PING_INTERVAL)
             
     except KeyboardInterrupt:
-        print("\n[System] Stopped")
+        print(f"\n{Colors.YELLOW}Stopped{Colors.RESET}")
 
 
 if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Tourist Device")
-    parser.add_argument("--test-sos", action="store_true", 
-                       help="Run in SOS test mode")
-    parser.add_argument("--device-id", type=str, default=DEVICE_ID,
-                       help="Override device ID")
+    parser.add_argument("--test-sos", action="store_true", help="Run in SOS test mode")
+    parser.add_argument("--device-id", type=str, help="Override device ID")
     
     args = parser.parse_args()
     

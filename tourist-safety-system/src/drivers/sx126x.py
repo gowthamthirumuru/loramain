@@ -214,7 +214,7 @@ class sx126x:
 
     def get_settings(self):
         # the pin M1 of lora HAT must be high when enter setting mode and get parameters
-        GPIO.output(M1,GPIO.HIGH)
+        GPIO.output(self.M1,GPIO.HIGH)
         time.sleep(0.1)
         
         # send command to get setting parameters
@@ -232,54 +232,61 @@ class sx126x:
             
             print("Frequence is {0}.125MHz.",fre_temp)
             print("Node address is {0}.",addr_temp)
-            print("Air speed is {0} bps"+ lora_air_speed_dic.get(None,air_speed_temp))
-            print("Power is {0} dBm" + lora_power_dic.get(None,power_temp))
-            GPIO.output(M1,GPIO.LOW)
+            print("Air speed is {0} bps"+ self.lora_air_speed_dic.get(None,air_speed_temp))
+            print("Power is {0} dBm" + self.lora_power_dic.get(None,power_temp))
+            GPIO.output(self.M1,GPIO.LOW)
 
 #
 # the data format like as following
 # "node address,frequence,payload"
 # "20,868,Hello World"
-    def send(self,data):
-        GPIO.output(self.M1,GPIO.LOW)
-        GPIO.output(self.M0,GPIO.LOW)
+    def send(self, data):
+        """
+        Send data via LoRa in FIXED transmission mode.
+        Format: [ADDR_H, ADDR_L, CHANNEL, PAYLOAD...]
+        Use 0xFFFF for broadcast to all nodes.
+        """
+        GPIO.output(self.M1, GPIO.LOW)
+        GPIO.output(self.M0, GPIO.LOW)
         time.sleep(0.1)
 
-        self.ser.write(data)
-        # if self.rssi == True:
-            # self.get_channel_rssi()
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        
+        # Fixed mode requires address header for transmission
+        # 0xFF, 0xFF = Broadcast address (all nodes receive)
+        # self.offset_freq = Channel offset
+        packet = bytes([0xFF, 0xFF, self.offset_freq]) + data
+        
+        self.ser.write(packet)
         time.sleep(0.1)
 
 
-# REPLACE the old 'receive' method in src/drivers/sx126x.py with this:
+# Receive method for transparent transmission mode
     def receive(self):
         """
-        Modified to RETURN data (message, rssi) instead of printing it.
+        Receive data from LoRa module.
+        Data format: [PAYLOAD...] + [RSSI_BYTE]
         """
         if self.ser.inWaiting() > 0:
-            time.sleep(0.1) # Wait for full packet
+            time.sleep(0.1)  # Wait for full packet
             r_buff = self.ser.read(self.ser.inWaiting())
             
-            # Verify packet length (needs at least header + payload + rssi)
-            if len(r_buff) < 4:
+            # Need at least 2 bytes (1 char + RSSI)
+            if len(r_buff) < 2:
                 return None, None
             
-            # 1. EXTRACT RSSI
-            # In this chip's UART mode, the last byte is usually the RSSI
-            # Formula: -(256 - value)
-            raw_rssi = r_buff[-1] 
+            # RSSI is the LAST byte
+            # Formula: -(256 - value) to convert to dBm
+            raw_rssi = r_buff[-1]
             rssi_val = -(256 - raw_rssi)
             
-            # 2. EXTRACT MESSAGE
-            # Bytes 0-2 are usually headers (Address High, Low, Freq). 
-            # The message starts at index 3 and ends before the RSSI byte.
+            # MESSAGE is everything EXCEPT the last byte (RSSI)
             try:
-                # Try to decode as text
-                msg_data = r_buff[3:-1]
+                msg_data = r_buff[:-1]
                 msg = msg_data.decode('utf-8', errors='ignore')
-            except:
-                # If binary, keep as string representation
-                msg = str(r_buff[3:-1])
+            except Exception:
+                msg = str(r_buff[:-1])
             
             return msg, rssi_val
         else:
