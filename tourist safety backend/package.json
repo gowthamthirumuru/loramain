@@ -1,0 +1,21 @@
+{
+  "name": "tourist-safety-backend",
+  "version": "1.0.0",
+  "description": "Backend for LoRa Tourist Safety System",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.0.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.2.1",
+    "helmet": "^8.1.0",
+    "mongoose": "^7.0.0",
+    "morgan": "^1.10.1",
+    "socket.io": "^4.6.0",
+    "winston": "^3.19.0"
+  }
+}

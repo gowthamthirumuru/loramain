@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Tourist Safety Dashboard (Test)</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .container { display: flex; gap: 20px; }
+        .box { border: 1px solid #ccc; padding: 10px; width: 45%; height: 300px; overflow-y: scroll; }
+        .alert { background-color: #ffdddd; border-left: 6px solid #f44336; padding: 10px; margin-bottom: 5px;}
+        .update { background-color: #ddffff; border-left: 6px solid #2196F3; padding: 10px; margin-bottom: 5px;}
+    </style>
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+</head>
+<body>
+    <h2>👮 Authority Dashboard (Real-Time Stream)</h2>
+    <div class="container">
+        <div class="box" id="location-box">
+            <h3>📍 Live Locations</h3>
+            <div id="locations"></div>
+        </div>
+        <div class="box" id="alert-box">
+            <h3>🚨 SOS ALERTS</h3>
+            <div id="alerts"></div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Connect to your Backend Server
+        const socket = io('http://localhost:5000');
+
+        socket.on('connect', () => {
+            console.log("Connected to Server with ID:", socket.id);
+            addLog('locations', "✅ System Connected. Waiting for data...");
+        });
+
+        // 2. Listen for Location Updates
+        socket.on('location_update', (data) => {
+            const msg = `<b>${data.name}</b> moved to [${data.lat}, ${data.lng}] (Status: ${data.status})`;
+            addLog('locations', msg, 'update');
+        });
+
+        // 3. Listen for SOS Alerts
+        socket.on('sos_alert', (data) => {
+            const msg = `⚠️ <b>CRITICAL SOS: ${data.tourist_name}</b> at [${data.location.lat}, ${data.location.lng}]!`;
+            addLog('alerts', msg, 'alert');
+            // Play a beep sound (optional)
+            // new Audio('https://actions.google.com/sounds/v1/alarms/beep_short.ogg').play();
+        });
+
+        function addLog(elementId, message, className) {
+            const div = document.createElement('div');
+            div.innerHTML = `<small>${new Date().toLocaleTimeString()}</small><br>${message}`;
+            if(className) div.classList.add(className);
+            const container = document.getElementById(elementId);
+            container.prepend(div);
+        }
+    </script>
+</body>
+</html>

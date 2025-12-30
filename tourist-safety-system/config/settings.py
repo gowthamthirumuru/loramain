@@ -56,3 +56,18 @@ def get_anchors():
 if __name__ == "__main__":
     print(f"Running on Raspberry Pi? {IS_RASPBERRY_PI}")
     print(f"Loaded Anchors: {list(get_anchors().keys())}")
+
+# --- 5. Backend API Configuration ---
+# URL of the backend server (change for production deployment)
+BACKEND_URL = os.environ.get('BACKEND_URL', 'http://192.168.0.32:5000')
+
+# API Key for authenticating with the backend (must match backend's GATEWAY_API_KEY)
+GATEWAY_API_KEY = os.environ.get('GATEWAY_API_KEY', 'my-secret-key-12345')
+
+# GPS Reference Point (coordinates of the MASTER anchor at x=0, y=0)
+# This is used to convert local X,Y coordinates to GPS lat/lng
+# UPDATE THESE with actual GPS coordinates of your master anchor!
+GPS_REFERENCE = {
+    "lat": 11.0168,   # Latitude of MASTER anchor
+    "lng": 76.9558    # Longitude of MASTER anchor
+}
