@@ -12,6 +12,9 @@ router.post('/register', validateTouristRegistration, touristController.register
 // GET /api/tourist - Get all tourists (with filters)
 router.get('/', touristController.getAll);
 
+// GET /api/tourist/search - Search tourists by name/phone
+router.get('/search', touristController.search);
+
 // GET /api/tourist/active - Get all active tourists
 router.get('/active', touristController.getActive);
 
@@ -20,6 +23,9 @@ router.get('/device/:deviceId', touristController.getByDeviceId);
 
 // GET /api/tourist/:id - Get tourist by ID
 router.get('/:id', validateObjectId('id'), touristController.getById);
+
+// GET /api/tourist/:id/location - Get tourist current location
+router.get('/:id/location', validateObjectId('id'), touristController.getLocation);
 
 // GET /api/tourist/:id/history - Get tourist with location history
 router.get('/:id/history', validateObjectId('id'), touristController.getHistory);

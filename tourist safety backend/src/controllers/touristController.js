@@ -197,3 +197,51 @@ exports.getByDeviceId = asyncHandler(async (req, res) => {
 
   res.json(successResponse(tourist));
 });
+
+/**
+ * Search Tourists
+ * GET /api/tourist/search?q=query
+ */
+exports.search = asyncHandler(async (req, res) => {
+  const { q } = req.query;
+
+  if (!q || q.length < 2) {
+    return res.json(successResponse([]));
+  }
+
+  const tourists = await Tourist.find({
+    $or: [
+      { name: { $regex: q, $options: 'i' } },
+      { phone: { $regex: q, $options: 'i' } },
+      { device_id: { $regex: q.toUpperCase(), $options: 'i' } }
+    ]
+  }).limit(20);
+
+  res.json(successResponse(tourists));
+});
+
+/**
+ * Get Tourist Location
+ * GET /api/tourist/:id/location
+ */
+exports.getLocation = asyncHandler(async (req, res) => {
+  const tourist = await Tourist.findById(req.params.id);
+
+  if (!tourist) {
+    throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
+  }
+
+  // Return last known location
+  if (tourist.last_location && tourist.last_location.lat && tourist.last_location.lng) {
+    res.json(successResponse({
+      lat: tourist.last_location.lat,
+      lng: tourist.last_location.lng
+    }));
+  } else {
+    // Default location if none available
+    res.json(successResponse({
+      lat: 27.1751,
+      lng: 78.0421
+    }));
+  }
+});
