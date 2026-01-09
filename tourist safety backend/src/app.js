@@ -7,6 +7,10 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const mongoSanitize = require('express-mongo-sanitize');
+const xss = require('xss-clean');
+const swaggerUi = require('swagger-ui-express');
+const swaggerJsdoc = require('swagger-jsdoc');
 
 const app = express();
 
@@ -18,17 +22,63 @@ const { generalLimiter } = require('./middleware/rateLimiter');
 // Import routes
 const apiRoutes = require('./routes/index');
 
+// =============== SWAGGER DOCUMENTATION ===============
+
+const swaggerOptions = {
+  definition: {
+    openapi: '3.0.0',
+    info: {
+      title: 'Tourist Safety Backend API',
+      version: '1.0.0',
+      description: 'API for LoRa-based Tourist Safety System',
+    },
+    servers: [
+      { url: 'http://localhost:5000', description: 'Development' }
+    ],
+    components: {
+      securitySchemes: {
+        bearerAuth: {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT'
+        },
+        apiKeyAuth: {
+          type: 'apiKey',
+          in: 'header',
+          name: 'X-API-Key'
+        }
+      }
+    }
+  },
+  apis: ['./src/routes/*.js', './src/controllers/*.js']
+};
+
+const swaggerSpec = swaggerJsdoc(swaggerOptions);
+
 // =============== SECURITY MIDDLEWARE ===============
 
 // Helmet for security headers
 app.use(helmet());
 
 // CORS configuration
+const allowedOrigins = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(',')
+  : ['http://localhost:3000', 'http://localhost:5173'];
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || '*',
+  origin: process.env.NODE_ENV === 'production'
+    ? allowedOrigins
+    : '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key']
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
+  credentials: true
 }));
+
+// Sanitize data against NoSQL injection
+app.use(mongoSanitize());
+
+// Sanitize data against XSS attacks
+app.use(xss());
 
 // =============== PARSING MIDDLEWARE ===============
 
@@ -52,6 +102,12 @@ app.use(generalLimiter);
 
 // =============== ROUTES ===============
 
+// Swagger API Documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customCss: '.swagger-ui .topbar { display: none }',
+  customSiteTitle: 'Tourist Safety API Docs'
+}));
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
@@ -68,7 +124,7 @@ app.get('/', (req, res) => {
     success: true,
     message: 'Tourist Safety Backend is Running',
     version: '1.0.0',
-    docs: '/api/docs' // TODO: Add swagger docs
+    docs: '/api-docs'
   });
 });
 
