@@ -32,10 +32,10 @@ const UserSchema = new mongoose.Schema({
         select: false // Don't include in queries by default
     },
 
-    // Salt for password hashing
+    // Salt for password hashing (legacy - bcryptjs stores salt in hash)
     salt: {
         type: String,
-        required: true,
+        required: false,
         select: false
     },
 
@@ -73,6 +73,12 @@ const UserSchema = new mongoose.Schema({
     preferences: {
         notifications: { type: Boolean, default: true },
         darkMode: { type: Boolean, default: false }
+    },
+
+    // Refresh Token for JWT auth
+    refreshToken: {
+        type: String,
+        select: false
     }
 
 }, { timestamps: true });

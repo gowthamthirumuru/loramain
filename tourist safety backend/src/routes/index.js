@@ -5,6 +5,9 @@
 
 const router = require('express').Router();
 
+// Import Auth Routes (Authentication)
+const authRoutes = require('./authRoutes');
+
 // Import route modules - Existing
 const touristRoutes = require('./touristRoutes');
 const locationRoutes = require('./locationRoutes');
@@ -18,6 +21,9 @@ const teamRoutes = require('./teamRoutes');
 const conversationRoutes = require('./conversationRoutes');
 const reportRoutes = require('./reportRoutes');
 const dashboardRoutes = require('./dashboardRoutes');
+
+// ========== Authentication Routes ==========
+router.use('/auth', authRoutes);
 
 // ========== Existing Routes (LoRa Gateway) ==========
 router.use('/tourist', touristRoutes);
