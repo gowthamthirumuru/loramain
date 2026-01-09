@@ -14,8 +14,8 @@ import type {
 // API Configuration
 // ============================================
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
-const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({
@@ -35,9 +35,15 @@ apiClient.interceptors.request.use((config) => {
     return config;
 });
 
-// Response interceptor for error handling
+// Response interceptor for error handling and data extraction
 apiClient.interceptors.response.use(
-    (response) => response,
+    (response) => {
+        // Backend returns { success, data, message } - extract data
+        if (response.data && typeof response.data === 'object' && 'data' in response.data) {
+            response.data = response.data.data;
+        }
+        return response;
+    },
     (error) => {
         if (error.response?.status === 401) {
             // Handle unauthorized - redirect to login

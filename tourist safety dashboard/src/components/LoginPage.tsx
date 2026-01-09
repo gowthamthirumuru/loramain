@@ -57,7 +57,10 @@ export function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-cyan-900 to-slate-900 flex items-center justify-center p-4">
+        <div
+            className="min-h-screen flex items-center justify-center p-4"
+            style={{ background: 'linear-gradient(135deg, #0f172a 0%, #164e63 50%, #0f172a 100%)' }}
+        >
             {/* Background Grid Pattern */}
             <div
                 className="absolute inset-0 opacity-20"
@@ -78,7 +81,7 @@ export function LoginPage() {
                 </div>
 
                 {/* Login Card */}
-                <Card className="bg-white/10 backdrop-blur-xl border-white/20 shadow-2xl">
+                <Card className="backdrop-blur-xl shadow-2xl" style={{ backgroundColor: 'rgba(255,255,255,0.1)', borderColor: 'rgba(255,255,255,0.2)' }}>
                     <div className="p-8">
                         <div className="text-center mb-6">
                             <h2 className="text-lg font-medium text-white">Sign In</h2>
@@ -100,24 +103,39 @@ export function LoginPage() {
                                     placeholder="officer@tourism-safety.gov"
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-cyan-400"
+                                    className="border-white/20 placeholder:text-gray-400 focus:border-cyan-400"
+                                    style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'white' }}
                                 />
                             </div>
 
                             <div className="space-y-2">
                                 <label className="text-sm text-white/80">Password</label>
-                                <div className="relative">
+                                <div className="relative" style={{ position: 'relative' }}>
                                     <Input
                                         type={showPassword ? 'text' : 'password'}
                                         placeholder="Enter your password"
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
-                                        className="bg-white/10 border-white/20 text-white placeholder:text-white/40 focus:border-cyan-400 pr-10"
+                                        className="border-white/20 placeholder:text-gray-400 focus:border-cyan-400"
+                                        style={{ backgroundColor: 'rgba(255,255,255,0.1)', color: 'white', paddingRight: '40px' }}
                                     />
                                     <button
                                         type="button"
                                         onClick={() => setShowPassword(!showPassword)}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-white/60 hover:text-white"
+                                        style={{
+                                            position: 'absolute',
+                                            right: '12px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            background: 'transparent',
+                                            border: 'none',
+                                            cursor: 'pointer',
+                                            padding: '4px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center'
+                                        }}
+                                        className="text-white/60 hover:text-white"
                                     >
                                         {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                                     </button>

@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { authApi, tokenManager, type AuthUser } from '../api/authApi';
+import { websocketService } from '../services/websocket';
 
 // ============================================
 // Auth Types
@@ -8,7 +10,7 @@ interface User {
     id: string;
     name: string;
     email: string;
-    role: 'admin' | 'supervisor' | 'officer';
+    role: 'admin' | 'operator' | 'viewer';
     accessLevel: number;
     avatar?: string;
 }
@@ -27,42 +29,14 @@ interface AuthContextType extends AuthState {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// ============================================
-// Demo Users
-// ============================================
-
-const DEMO_USERS: Record<string, { password: string; user: User }> = {
-    'admin@tourism-safety.gov': {
-        password: 'admin123',
-        user: {
-            id: 'USR-001',
-            name: 'Command Officer',
-            email: 'admin@tourism-safety.gov',
-            role: 'admin',
-            accessLevel: 5,
-        }
-    },
-    'supervisor@tourism-safety.gov': {
-        password: 'super123',
-        user: {
-            id: 'USR-002',
-            name: 'Shift Supervisor',
-            email: 'supervisor@tourism-safety.gov',
-            role: 'supervisor',
-            accessLevel: 4,
-        }
-    },
-    'officer@tourism-safety.gov': {
-        password: 'officer123',
-        user: {
-            id: 'USR-003',
-            name: 'Field Officer',
-            email: 'officer@tourism-safety.gov',
-            role: 'officer',
-            accessLevel: 3,
-        }
-    }
-};
+// Convert backend user to frontend user format
+const convertUser = (backendUser: AuthUser): User => ({
+    id: backendUser.id,
+    name: backendUser.name,
+    email: backendUser.email,
+    role: backendUser.role === 'admin' ? 'admin' : backendUser.role === 'operator' ? 'operator' : 'viewer',
+    accessLevel: backendUser.role === 'admin' ? 5 : backendUser.role === 'operator' ? 4 : 3,
+});
 
 // ============================================
 // Auth Provider
@@ -81,55 +55,69 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Check for existing session on mount
     useEffect(() => {
-        const storedUser = localStorage.getItem('auth_user');
-        const token = localStorage.getItem('auth_token');
+        const checkAuth = async () => {
+            const token = tokenManager.getToken();
+            const storedUser = tokenManager.getUser();
 
-        if (storedUser && token) {
-            try {
-                const user = JSON.parse(storedUser);
-                setState({
-                    user,
-                    isAuthenticated: true,
-                    isLoading: false,
-                });
-            } catch {
-                localStorage.removeItem('auth_user');
-                localStorage.removeItem('auth_token');
+            if (token && storedUser) {
+                try {
+                    // Verify token is still valid by calling getMe
+                    const user = await authApi.getMe();
+                    setState({
+                        user: convertUser(user),
+                        isAuthenticated: true,
+                        isLoading: false,
+                    });
+                    // Connect WebSocket after auth verified
+                    websocketService.connect();
+                } catch (error) {
+                    // Token invalid, clear and show login
+                    console.error('Auth token invalid:', error);
+                    tokenManager.clearTokens();
+                    setState({ user: null, isAuthenticated: false, isLoading: false });
+                }
+            } else {
                 setState({ user: null, isAuthenticated: false, isLoading: false });
             }
-        } else {
-            setState({ user: null, isAuthenticated: false, isLoading: false });
-        }
+        };
+
+        checkAuth();
     }, []);
 
     const login = useCallback(async (email: string, password: string): Promise<boolean> => {
         setState(prev => ({ ...prev, isLoading: true }));
 
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        const userEntry = DEMO_USERS[email.toLowerCase()];
-
-        if (userEntry && userEntry.password === password) {
-            const token = `demo-token-${Date.now()}`;
-            localStorage.setItem('auth_token', token);
-            localStorage.setItem('auth_user', JSON.stringify(userEntry.user));
+        try {
+            const result = await authApi.login({ email, password });
+            const user = convertUser(result.user);
 
             setState({
-                user: userEntry.user,
+                user,
                 isAuthenticated: true,
                 isLoading: false,
             });
-            return true;
-        }
 
-        setState(prev => ({ ...prev, isLoading: false }));
-        return false;
+            // Connect WebSocket after successful login
+            websocketService.connect();
+
+            return true;
+        } catch (error: any) {
+            console.error('Login failed:', error);
+            setState(prev => ({ ...prev, isLoading: false }));
+            return false;
+        }
     }, []);
 
-    const logout = useCallback(() => {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('auth_user');
+    const logout = useCallback(async () => {
+        try {
+            await authApi.logout();
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+
+        // Disconnect WebSocket
+        websocketService.disconnect();
+
         setState({
             user: null,
             isAuthenticated: false,
@@ -141,7 +129,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
         setState(prev => {
             if (!prev.user) return prev;
             const updatedUser = { ...prev.user, ...updates };
-            localStorage.setItem('auth_user', JSON.stringify(updatedUser));
+            // Update in localStorage too
+            const storedUser = tokenManager.getUser();
+            if (storedUser) {
+                tokenManager.setUser({ ...storedUser, ...updates } as AuthUser);
+            }
             return { ...prev, user: updatedUser };
         });
     }, []);
