@@ -28,9 +28,10 @@ except ImportError:
 from config.settings import LORA_SETTINGS, SERIAL_PORT, ENV_FACTOR_N, RSSI_AT_1M
 
 # --- Configuration ---
-SAMPLE_COUNT = 50           # Number of RSSI samples to collect per measurement
-SAMPLE_INTERVAL = 0.1       # Seconds between samples
+SAMPLE_COUNT = 20           # Target RSSI samples (Tourist pings every 2s, so 20 = ~40s)
+SAMPLE_INTERVAL = 2.5       # Seconds between checks (match tourist ping interval)
 CALIBRATION_DISTANCE_2 = 5  # Second distance in meters for N calculation
+MIN_SAMPLES = 5             # Minimum samples needed for valid calibration
 
 
 def collect_rssi_samples(node, count=SAMPLE_COUNT):
@@ -39,16 +40,21 @@ def collect_rssi_samples(node, count=SAMPLE_COUNT):
     Filters out None values.
     """
     samples = []
-    print(f"  Collecting {count} RSSI samples...")
+    max_attempts = count * 5  # More attempts to account for missed packets
+    print(f"  Collecting up to {count} RSSI samples (this takes ~{count * 2}s)...")
+    print("  Keep the transmitter active and at the correct distance.")
+    print()
     
-    for i in range(count * 3):  # Try 3x to get enough samples
+    for i in range(max_attempts):
         if len(samples) >= count:
             break
         
         msg, rssi = node.receive()
         if rssi is not None:
             samples.append(rssi)
-            print(f"\r  Samples: {len(samples)}/{count} | Latest RSSI: {rssi} dBm", end='', flush=True)
+            print(f"\r  Samples: {len(samples)}/{count} | Latest RSSI: {rssi} dBm    ", end='', flush=True)
+        else:
+            print(f"\r  Samples: {len(samples)}/{count} | Waiting for signal...    ", end='', flush=True)
         
         time.sleep(SAMPLE_INTERVAL)
     
@@ -126,7 +132,7 @@ def run_calibration():
     if HARDWARE_AVAILABLE and node:
         samples_1m = collect_rssi_samples(node, SAMPLE_COUNT)
         
-        if len(samples_1m) < 10:
+        if len(samples_1m) < MIN_SAMPLES:
             print("  ERROR: Not enough samples collected. Check if transmitter is active.")
             return
         
@@ -159,7 +165,7 @@ def run_calibration():
     if HARDWARE_AVAILABLE and node:
         samples_d = collect_rssi_samples(node, SAMPLE_COUNT)
         
-        if len(samples_d) < 10:
+        if len(samples_d) < MIN_SAMPLES:
             print("  ERROR: Not enough samples collected.")
             return
         
