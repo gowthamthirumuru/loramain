@@ -42,11 +42,8 @@ SERIAL_PORT = "/dev/ttyS0"
 ENV_FACTOR_N = 4.0  # ← CHANGED FOR INDOOR TESTING
 
 # Measured RSSI at 1 meter distance 
-# TODO: Calibrate this on your first test!
-# Steps: 1) Place tourist 1 meter from anchor
-#        2) Read the RSSI value from relay output
-#        3) Update this value
-RSSI_AT_1M = -40  # ← Typical indoor value (may need adjustment) 
+# CALIBRATED: Measured -15 dBm at exactly 1 meter (2026-01-27)
+RSSI_AT_1M = -15  # ← Updated based on real measurement 
 
 # --- 5. Load Anchors ---
 def get_anchors():
