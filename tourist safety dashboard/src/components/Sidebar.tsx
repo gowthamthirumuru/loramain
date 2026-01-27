@@ -1,8 +1,9 @@
 import React from 'react';
-import { Home, Map, AlertTriangle, FileText, Phone, BarChart3, MessageSquare, Shield } from 'lucide-react';
+import { Home, Map, AlertTriangle, FileText, Phone, BarChart3, MessageSquare, Shield, Users, Settings, Layers, Radio, UserPlus, ClipboardList } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { Badge } from './ui/badge';
 import { useAlerts, useTeams, useDashboardStore } from '../store/store';
+import { useAuth } from '../auth/AuthContext';
 
 interface SidebarProps {
   activeView: string;
@@ -14,6 +15,7 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
   const alerts = useAlerts();
   const teams = useTeams();
   const { conversations } = useDashboardStore();
+  const { user } = useAuth();
 
   // Calculate dynamic counts
   const activeAlertCount = alerts.filter(a => a.status === 'active' || a.status === 'responding').length;
@@ -26,9 +28,18 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
     { id: 'map', label: 'Live Map', icon: Map },
     { id: 'alerts', label: 'Alerts', icon: AlertTriangle, badge: activeAlertCount > 0 ? activeAlertCount : undefined },
     { id: 'emergency', label: 'Emergency Response', icon: Phone },
+    { id: 'zones', label: 'Zones', icon: Layers },
+    { id: 'tourists', label: 'Tourists', icon: UserPlus },
+    { id: 'devices', label: 'Devices', icon: Radio },
     { id: 'analytics', label: 'Analytics', icon: BarChart3 },
     { id: 'communication', label: 'Communications', icon: MessageSquare, badge: unreadMessageCount > 0 ? unreadMessageCount : undefined },
     { id: 'reports', label: 'Reports', icon: FileText },
+    // Admin-only items
+    ...(user?.role === 'admin' ? [
+      { id: 'users', label: 'User Management', icon: Users },
+      { id: 'audit', label: 'Audit Logs', icon: ClipboardList },
+    ] : []),
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -59,8 +70,8 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
               key={item.id}
               onClick={() => setActiveView(item.id)}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md transition-all duration-200 group ${isActive
-                  ? 'bg-cyan-600 text-white shadow-md'
-                  : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
+                ? 'bg-cyan-600 text-white shadow-md'
+                : 'text-neutral-300 hover:bg-neutral-800 hover:text-white'
                 }`}
             >
               <div className="flex items-center space-x-3">

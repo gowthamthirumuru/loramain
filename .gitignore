@@ -10,9 +10,16 @@ __pycache__/
 venv/
 .venv/
 env/
+.pytest_cache/
 
 # --- Node.js ---
 node_modules/
+package-lock.json
+
+# --- Build Outputs ---
+dist/
+build/
+.vite/
 
 # --- OS Files ---
 Thumbs.db
@@ -22,10 +29,26 @@ Desktop.ini
 # --- IDE ---
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 
 # --- Logs ---
 logs/
 *.log
+npm-debug.log*
 
 # --- Secrets (never commit!) ---
 .env
+.env.local
+.env.*.local
+
+# --- Coverage ---
+coverage/
+.nyc_output/
+htmlcov/
+
+# --- Temp Files ---
+tmp/
+temp/
+*.tmp

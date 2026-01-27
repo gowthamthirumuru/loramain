@@ -9,6 +9,12 @@ import { AnalyticsView } from "./components/AnalyticsView";
 import { CommunicationCenter } from "./components/CommunicationCenter";
 import { ConnectionStatus } from "./components/ConnectionStatus";
 import { LoginPage } from "./components/LoginPage";
+import { UserManagement } from "./components/UserManagement";
+import { SettingsPage } from "./components/SettingsPage";
+import ZoneEditor from "./components/ZoneEditor";
+import DeviceManagement from "./components/DeviceManagement";
+import TouristRegistration from "./components/TouristRegistration";
+import AuditLogViewer from "./components/AuditLogViewer";
 import { Toaster } from "./components/ui/sonner";
 import { useAuth } from "./auth/AuthContext";
 import { Button } from "./components/ui/button";
@@ -145,6 +151,18 @@ export default function App() {
         return <AnalyticsView />;
       case "communication":
         return <CommunicationCenter />;
+      case "users":
+        return <UserManagement />;
+      case "settings":
+        return <SettingsPage />;
+      case "zones":
+        return <ZoneEditor />;
+      case "devices":
+        return <DeviceManagement />;
+      case "tourists":
+        return <TouristRegistration />;
+      case "audit":
+        return <AuditLogViewer />;
       default:
         return <DashboardOverview />;
     }

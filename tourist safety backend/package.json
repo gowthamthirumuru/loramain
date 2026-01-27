@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "nodemon src/server.js"
+    "dev": "nodemon src/server.js",
+    "seed": "node scripts/seed.js",
+    "cleanup": "node scripts/cleanup.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

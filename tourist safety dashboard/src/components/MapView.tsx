@@ -1,35 +1,199 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Circle, useMap } from 'react-leaflet';
+import L from 'leaflet';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { Search, Filter, MapPin, AlertTriangle, Users, Layers, ExternalLink } from 'lucide-react';
+import { Search, Filter, MapPin, AlertTriangle, Users, Layers, ExternalLink, RefreshCw, Radio } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
 import { useEmergencies, useTeams, useAlerts } from '../store/store';
+import { apiClient as api } from '../api/api';
+import 'leaflet/dist/leaflet.css';
 
-// Sample tourist locations around India
-const touristLocations = [
-  { id: 't1', name: 'Tourist Group A', lat: 27.1850, lng: 78.0520, count: 12 },
-  { id: 't2', name: 'Tourist Group B', lat: 28.6100, lng: 77.2200, count: 8 },
-  { id: 't3', name: 'Tourist Group C', lat: 18.9400, lng: 72.8400, count: 15 },
-  { id: 't4', name: 'Tourist Group D', lat: 26.9200, lng: 75.7800, count: 5 },
-];
+// Fix Leaflet default icon issue
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+});
+
+// Custom marker icons
+const createCustomIcon = (color: string, pulse = false) => {
+  const pulseClass = pulse ? 'animate-ping' : '';
+  return L.divIcon({
+    className: 'custom-marker',
+    html: `
+      <div style="position: relative;">
+        ${pulse ? `<div style="position: absolute; inset: -4px; background: ${color}; border-radius: 50%; opacity: 0.4; animation: ping 1s cubic-bezier(0, 0, 0.2, 1) infinite;"></div>` : ''}
+        <div style="width: 24px; height: 24px; background: ${color}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
+      </div>
+    `,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+};
+
+const touristIcon = createCustomIcon('#06b6d4');
+const teamIcon = createCustomIcon('#22c55e');
+const sosIcon = createCustomIcon('#ef4444', true);
+const anchorIcon = createCustomIcon('#8b5cf6');
+
+// Zone type colors
+const zoneColors: Record<string, string> = {
+  safe: '#22c55e',
+  danger: '#ef4444',
+  restricted: '#f59e0b',
+  monitoring: '#3b82f6'
+};
+
+// Map center controller
+function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, zoom);
+  }, [center, zoom, map]);
+  return null;
+}
+
+// Pulsing SOS marker component
+function PulsingSosMarker({ position, emergency }: { position: [number, number]; emergency: any }) {
+  return (
+    <>
+      <Circle
+        center={position}
+        radius={500}
+        pathOptions={{
+          color: '#ef4444',
+          fillColor: '#ef4444',
+          fillOpacity: 0.2,
+          weight: 2
+        }}
+      />
+      <Marker position={position} icon={sosIcon}>
+        <Popup>
+          <div className="min-w-[200px]">
+            <div className="flex items-center gap-2 mb-2">
+              <AlertTriangle className="w-4 h-4 text-red-500" />
+              <span className="font-bold text-red-600">{emergency.type}</span>
+            </div>
+            <p className="text-sm font-medium">{emergency.tourist}</p>
+            <p className="text-xs text-gray-600">{emergency.location}</p>
+            <p className="text-xs text-gray-500 mt-1">{emergency.timeElapsed}</p>
+            <div className="mt-2 pt-2 border-t">
+              <span className={`px-2 py-1 rounded text-xs ${emergency.status === 'active' ? 'bg-red-100 text-red-700' :
+                  emergency.status === 'responding' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                }`}>
+                {emergency.status}
+              </span>
+            </div>
+          </div>
+        </Popup>
+      </Marker>
+    </>
+  );
+}
+
+interface Zone {
+  _id: string;
+  name: string;
+  type: 'safe' | 'danger' | 'restricted' | 'monitoring';
+  boundary: {
+    coordinates: number[][][];
+  };
+  status: string;
+}
+
+interface Tourist {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  status: string;
+  device?: string;
+}
+
+interface AnchorNode {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  status: string;
+}
 
 export function MapView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showIncidents, setShowIncidents] = useState(true);
   const [showTeams, setShowTeams] = useState(true);
   const [showTourists, setShowTourists] = useState(true);
-  const [selectedLocation, setSelectedLocation] = useState({ lat: 22.5, lng: 78.9, zoom: 5 });
+  const [showZones, setShowZones] = useState(true);
+  const [showAnchors, setShowAnchors] = useState(true);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
+  const [mapZoom, setMapZoom] = useState(5);
 
-  // Get data from store
+  // Data from store
   const emergencies = useEmergencies();
   const teams = useTeams();
   const alerts = useAlerts();
 
-  // Parse coordinates from emergency data
-  const incidentMarkers = useMemo(() => {
+  // Local state for API data
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [tourists, setTourists] = useState<Tourist[]>([]);
+  const [anchors, setAnchors] = useState<AnchorNode[]>([]);
+
+  // Fetch zones from API
+  useEffect(() => {
+    const fetchZones = async () => {
+      try {
+        const response = await api.get('/zones');
+        setZones(response.data || []);
+      } catch (error) {
+        console.error('Failed to fetch zones:', error);
+        // Demo zones
+        setZones([
+          {
+            _id: 'z1',
+            name: 'Taj Mahal Safe Zone',
+            type: 'safe',
+            boundary: { coordinates: [[[78.02, 27.16], [78.06, 27.16], [78.06, 27.19], [78.02, 27.19], [78.02, 27.16]]] },
+            status: 'active'
+          },
+          {
+            _id: 'z2',
+            name: 'Yamuna River Danger Zone',
+            type: 'danger',
+            boundary: { coordinates: [[[78.01, 27.15], [78.04, 27.15], [78.04, 27.17], [78.01, 27.17], [78.01, 27.15]]] },
+            status: 'active'
+          }
+        ]);
+      }
+    };
+    fetchZones();
+  }, []);
+
+  // Demo tourist positions (would come from WebSocket in production)
+  useEffect(() => {
+    setTourists([
+      { id: 't1', name: 'John Smith (LORA-001)', lat: 27.1751, lng: 78.0421, status: 'active', device: 'LORA-001' },
+      { id: 't2', name: 'Maria Garcia (LORA-002)', lat: 28.6139, lng: 77.2090, status: 'active', device: 'LORA-002' },
+      { id: 't3', name: 'Tourist Group A', lat: 19.0760, lng: 72.8777, status: 'active' },
+      { id: 't4', name: 'Tourist Group B', lat: 26.9124, lng: 75.7873, status: 'active' },
+    ]);
+
+    // Demo anchor nodes
+    setAnchors([
+      { id: 'a1', name: 'Anchor-TajMahal-1', lat: 27.1751, lng: 78.0421, status: 'online' },
+      { id: 'a2', name: 'Anchor-TajMahal-2', lat: 27.1760, lng: 78.0400, status: 'online' },
+      { id: 'a3', name: 'Anchor-Delhi-1', lat: 28.6129, lng: 77.2295, status: 'online' },
+      { id: 'a4', name: 'Anchor-Delhi-2', lat: 28.6100, lng: 77.2100, status: 'offline' },
+    ]);
+  }, []);
+
+  // Parse emergency coordinates
+  const sosMarkers = useMemo(() => {
     return emergencies.map(e => {
       const parts = e.coordinates?.split(',') || [];
       const lat = parseFloat(parts[0]?.trim() || '0');
@@ -38,7 +202,7 @@ export function MapView() {
     }).filter(e => e.lat !== 0 && e.lng !== 0);
   }, [emergencies]);
 
-  // Team coordinates
+  // Team positions
   const teamCoords = [
     { lat: 19.0760, lng: 72.8777 },
     { lat: 28.6139, lng: 77.2090 },
@@ -54,25 +218,25 @@ export function MapView() {
     }));
   }, [teams]);
 
+  const focusOnLocation = (lat: number, lng: number) => {
+    setMapCenter([lat, lng]);
+    setMapZoom(14);
+    toast.info('Map focused on location');
+  };
+
   const handleDispatch = (incidentId: string) => {
     toast.success(`Team dispatched to incident ${incidentId}`, {
       description: 'Response team en route'
     });
   };
 
-  const focusOnLocation = (lat: number, lng: number) => {
-    setSelectedLocation({ lat, lng, zoom: 14 });
-    toast.info('Map focused on location');
-  };
-
-  // Generate OpenStreetMap embed URL with markers
-  const mapUrl = `https://www.openstreetmap.org/export/embed.html?bbox=${selectedLocation.lng - 10},${selectedLocation.lat - 5},${selectedLocation.lng + 10},${selectedLocation.lat + 5}&layer=mapnik&marker=${selectedLocation.lat},${selectedLocation.lng}`;
-
   // Layer controls
   const mapLayers = [
-    { id: 'incidents', label: 'Active Incidents', count: emergencies.length, enabled: showIncidents, color: 'bg-red-500' },
-    { id: 'tourists', label: 'Tourist Groups', count: touristLocations.reduce((a, t) => a + t.count, 0), enabled: showTourists, color: 'bg-cyan-500' },
-    { id: 'responders', label: 'Response Teams', count: teams.length, enabled: showTeams, color: 'bg-green-500' },
+    { id: 'incidents', label: 'SOS Alerts', count: sosMarkers.length, enabled: showIncidents, color: 'bg-red-500', toggle: () => setShowIncidents(!showIncidents) },
+    { id: 'tourists', label: 'Tourists', count: tourists.length, enabled: showTourists, color: 'bg-cyan-500', toggle: () => setShowTourists(!showTourists) },
+    { id: 'responders', label: 'Response Teams', count: teamMarkers.length, enabled: showTeams, color: 'bg-green-500', toggle: () => setShowTeams(!showTeams) },
+    { id: 'zones', label: 'Zones', count: zones.length, enabled: showZones, color: 'bg-blue-500', toggle: () => setShowZones(!showZones) },
+    { id: 'anchors', label: 'Anchor Nodes', count: anchors.length, enabled: showAnchors, color: 'bg-purple-500', toggle: () => setShowAnchors(!showAnchors) },
   ];
 
   return (
@@ -95,64 +259,141 @@ export function MapView() {
             </div>
 
             <div className="flex items-center space-x-2">
-              <Button size="sm" variant="outline" className="h-9 text-xs border-neutral-300">
-                <Filter className="w-4 h-4 mr-1.5" />
-                Filters
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-9 text-xs border-neutral-300"
+                onClick={() => { setMapCenter([20.5937, 78.9629]); setMapZoom(5); }}
+              >
+                <RefreshCw className="w-4 h-4 mr-1.5" />
+                Reset View
               </Button>
               <Button size="sm" className="bg-cyan-600 hover:bg-cyan-700 h-9 text-xs">
                 <div className="w-2 h-2 bg-white rounded-full animate-pulse mr-1.5"></div>
                 Live
               </Button>
-              <a
-                href={`https://www.openstreetmap.org/?mlat=${selectedLocation.lat}&mlon=${selectedLocation.lng}#map=${selectedLocation.zoom}/${selectedLocation.lat}/${selectedLocation.lng}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <Button size="sm" variant="outline" className="h-9 text-xs border-neutral-300">
-                  <ExternalLink className="w-4 h-4 mr-1.5" />
-                  Full Map
-                </Button>
-              </a>
             </div>
           </div>
         </div>
 
-        {/* Map Display */}
+        {/* Interactive Map */}
         <div className="flex-1 relative">
-          <iframe
-            title="Tourist Safety Map"
-            src={mapUrl}
-            style={{ width: '100%', height: '100%', border: 'none' }}
-            className="bg-neutral-200"
-          />
+          <MapContainer
+            center={mapCenter}
+            zoom={mapZoom}
+            className="h-full w-full"
+            style={{ background: '#e5e7eb' }}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <MapController center={mapCenter} zoom={mapZoom} />
 
-          {/* Overlay with markers info */}
-          <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 max-w-xs">
-            <h4 className="text-sm font-semibold mb-2 text-neutral-800">Map Overview</h4>
-            <p className="text-xs text-neutral-600 mb-2">
-              Interactive map showing {incidentMarkers.length} incidents, {teamMarkers.length} teams, and {touristLocations.length} tourist groups across India.
-            </p>
-            <div className="flex gap-2 flex-wrap">
-              {showIncidents && (
-                <div className="flex items-center gap-1 text-xs bg-red-100 text-red-700 px-2 py-1 rounded">
-                  <div className="w-2 h-2 bg-red-500 rounded-full"></div>
-                  {incidentMarkers.length} Incidents
-                </div>
-              )}
-              {showTeams && (
-                <div className="flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  {teamMarkers.length} Teams
-                </div>
-              )}
-              {showTourists && (
-                <div className="flex items-center gap-1 text-xs bg-cyan-100 text-cyan-700 px-2 py-1 rounded">
-                  <div className="w-2 h-2 bg-cyan-500 rounded-full"></div>
-                  {touristLocations.length} Groups
-                </div>
-              )}
-            </div>
-          </div>
+            {/* Zone polygons */}
+            {showZones && zones.map(zone => {
+              if (!zone.boundary?.coordinates?.[0]) return null;
+              const coords = zone.boundary.coordinates[0].map(c => [c[1], c[0]] as [number, number]);
+              return (
+                <Polygon
+                  key={zone._id}
+                  positions={coords}
+                  pathOptions={{
+                    color: zoneColors[zone.type] || '#3b82f6',
+                    fillColor: zoneColors[zone.type] || '#3b82f6',
+                    fillOpacity: 0.2,
+                    weight: 2
+                  }}
+                >
+                  <Popup>
+                    <div className="font-medium">{zone.name}</div>
+                    <div className="text-xs text-gray-500 capitalize">{zone.type} zone</div>
+                  </Popup>
+                </Polygon>
+              );
+            })}
+
+            {/* SOS markers with animation */}
+            {showIncidents && sosMarkers.map(emergency => (
+              <PulsingSosMarker
+                key={emergency.id}
+                position={[emergency.lat, emergency.lng]}
+                emergency={emergency}
+              />
+            ))}
+
+            {/* Tourist markers */}
+            {showTourists && tourists.map(tourist => (
+              <Marker
+                key={tourist.id}
+                position={[tourist.lat, tourist.lng]}
+                icon={touristIcon}
+              >
+                <Popup>
+                  <div className="min-w-[150px]">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users className="w-4 h-4 text-cyan-500" />
+                      <span className="font-medium">{tourist.name}</span>
+                    </div>
+                    {tourist.device && (
+                      <p className="text-xs text-gray-500">Device: {tourist.device}</p>
+                    )}
+                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs mt-1 inline-block">
+                      {tourist.status}
+                    </span>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
+            {/* Team markers */}
+            {showTeams && teamMarkers.map(team => (
+              <Marker
+                key={team.id}
+                position={[team.lat, team.lng]}
+                icon={teamIcon}
+              >
+                <Popup>
+                  <div className="min-w-[150px]">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Users className="w-4 h-4 text-green-500" />
+                      <span className="font-medium">{team.name}</span>
+                    </div>
+                    <p className="text-xs text-gray-500">{team.location}</p>
+                    <p className="text-xs text-gray-500">{team.members} members</p>
+                    <span className={`px-2 py-0.5 rounded text-xs mt-1 inline-block ${team.status === 'available' ? 'bg-green-100 text-green-700' :
+                        team.status === 'responding' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-gray-100 text-gray-700'
+                      }`}>
+                      {team.status}
+                    </span>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
+            {/* Anchor node markers */}
+            {showAnchors && anchors.map(anchor => (
+              <Marker
+                key={anchor.id}
+                position={[anchor.lat, anchor.lng]}
+                icon={anchorIcon}
+              >
+                <Popup>
+                  <div className="min-w-[150px]">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Radio className="w-4 h-4 text-purple-500" />
+                      <span className="font-medium">{anchor.name}</span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-xs ${anchor.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                      {anchor.status}
+                    </span>
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+          </MapContainer>
         </div>
       </div>
 
@@ -161,14 +402,14 @@ export function MapView() {
         {/* Active Incidents */}
         <div className="p-4 border-b border-neutral-200">
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-neutral-900">Active Incidents</h3>
+            <h3 className="text-sm font-semibold text-neutral-900">Active SOS Alerts</h3>
             <Badge variant="destructive" className="text-xs">{emergencies.length}</Badge>
           </div>
           <div className="space-y-2 max-h-52 overflow-y-auto">
             {emergencies.map((incident) => (
               <div
                 key={incident.id}
-                className="p-3 rounded-lg border bg-neutral-50 border-neutral-200 hover:bg-neutral-100 transition-colors cursor-pointer"
+                className="p-3 rounded-lg border bg-red-50 border-red-200 hover:bg-red-100 transition-colors cursor-pointer"
                 onClick={() => {
                   const parts = incident.coordinates?.split(',') || [];
                   const lat = parseFloat(parts[0]?.trim() || '22.5');
@@ -180,11 +421,11 @@ export function MapView() {
                   <Badge variant="destructive" className="text-xs">{incident.type}</Badge>
                   <span className="text-xs text-neutral-500">{incident.timeElapsed}</span>
                 </div>
-                <p className="text-xs text-neutral-900 mb-1">{incident.location}</p>
-                <p className="text-xs text-neutral-500 font-mono mb-2">{incident.coordinates}</p>
+                <p className="text-xs text-neutral-900 mb-1 font-medium">{incident.tourist}</p>
+                <p className="text-xs text-neutral-600 mb-1">{incident.location}</p>
                 <Button
                   size="sm"
-                  className="w-full h-7 text-xs bg-cyan-600 hover:bg-cyan-700"
+                  className="w-full h-7 text-xs bg-cyan-600 hover:bg-cyan-700 mt-2"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleDispatch(incident.id);
@@ -195,6 +436,9 @@ export function MapView() {
                 </Button>
               </div>
             ))}
+            {emergencies.length === 0 && (
+              <p className="text-xs text-neutral-500 text-center py-4">No active alerts</p>
+            )}
           </div>
         </div>
 
@@ -226,9 +470,6 @@ export function MapView() {
                     <Users className="w-3 h-3 inline mr-1" />
                     {team.members} members
                   </span>
-                  <Button size="sm" variant="outline" className="h-6 px-2 text-xs border-neutral-300">
-                    Track
-                  </Button>
                 </div>
               </div>
             ))}
@@ -241,7 +482,7 @@ export function MapView() {
             <Layers className="w-4 h-4 text-neutral-600" />
             <h4 className="text-sm font-semibold text-neutral-900">Map Layers</h4>
           </div>
-          <div className="space-y-3">
+          <div className="space-y-2">
             {mapLayers.map((layer) => (
               <div key={layer.id} className="flex items-center justify-between text-sm p-2 rounded bg-white border border-neutral-200">
                 <div className="flex items-center space-x-2">
@@ -253,11 +494,7 @@ export function MapView() {
                   <input
                     type="checkbox"
                     checked={layer.enabled}
-                    onChange={() => {
-                      if (layer.id === 'incidents') setShowIncidents(!showIncidents);
-                      if (layer.id === 'tourists') setShowTourists(!showTourists);
-                      if (layer.id === 'responders') setShowTeams(!showTeams);
-                    }}
+                    onChange={layer.toggle}
                     className="w-4 h-4 accent-cyan-600"
                   />
                 </div>
@@ -275,7 +512,7 @@ export function MapView() {
                 size="sm"
                 variant="ghost"
                 className="w-full justify-start text-xs h-7"
-                onClick={() => setSelectedLocation({ lat: 28.6139, lng: 77.2090, zoom: 11 })}
+                onClick={() => { setMapCenter([28.6139, 77.2090]); setMapZoom(11); }}
               >
                 <MapPin className="w-3 h-3 mr-2 text-cyan-600" />
                 Delhi Region
@@ -284,7 +521,7 @@ export function MapView() {
                 size="sm"
                 variant="ghost"
                 className="w-full justify-start text-xs h-7"
-                onClick={() => setSelectedLocation({ lat: 19.0760, lng: 72.8777, zoom: 11 })}
+                onClick={() => { setMapCenter([19.0760, 72.8777]); setMapZoom(11); }}
               >
                 <MapPin className="w-3 h-3 mr-2 text-cyan-600" />
                 Mumbai Region
@@ -293,7 +530,7 @@ export function MapView() {
                 size="sm"
                 variant="ghost"
                 className="w-full justify-start text-xs h-7"
-                onClick={() => setSelectedLocation({ lat: 27.1751, lng: 78.0421, zoom: 13 })}
+                onClick={() => { setMapCenter([27.1751, 78.0421]); setMapZoom(13); }}
               >
                 <MapPin className="w-3 h-3 mr-2 text-cyan-600" />
                 Agra / Taj Mahal
@@ -308,16 +545,20 @@ export function MapView() {
             <h5 className="text-xs font-semibold text-neutral-600 mb-2">Legend</h5>
             <div className="space-y-1.5">
               <div className="flex items-center space-x-2 text-xs text-neutral-600">
-                <AlertTriangle className="w-3 h-3 text-red-600" />
-                <span>Emergency Incidents</span>
+                <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                <span>SOS Alerts</span>
               </div>
               <div className="flex items-center space-x-2 text-xs text-neutral-600">
-                <Users className="w-3 h-3 text-green-600" />
+                <div className="w-3 h-3 rounded-full bg-cyan-500"></div>
+                <span>Tourists</span>
+              </div>
+              <div className="flex items-center space-x-2 text-xs text-neutral-600">
+                <div className="w-3 h-3 rounded-full bg-green-500"></div>
                 <span>Response Teams</span>
               </div>
               <div className="flex items-center space-x-2 text-xs text-neutral-600">
-                <MapPin className="w-3 h-3 text-cyan-600" />
-                <span>Tourist Groups</span>
+                <div className="w-3 h-3 rounded-full bg-purple-500"></div>
+                <span>Anchor Nodes</span>
               </div>
             </div>
           </div>
