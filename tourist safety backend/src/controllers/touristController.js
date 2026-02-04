@@ -3,8 +3,7 @@
  * Handles tourist registration and management
  */
 
-const Tourist = require('../models/Tourist');
-const LocationLog = require('../models/LocationLog');
+const { prisma } = require('../config/db');
 const { asyncHandler, ApiError } = require('../middleware/errorHandler');
 const { successResponse } = require('../utils/helpers');
 const { TOURIST_STATUS } = require('../config/constants');
@@ -18,25 +17,28 @@ exports.register = asyncHandler(async (req, res) => {
   const { name, phone, device_id, emergency_contact, trip_start, trip_end } = req.body;
 
   // Check if device is already in use
-  const existing = await Tourist.findOne({
-    device_id,
-    status: { $in: [TOURIST_STATUS.ACTIVE, TOURIST_STATUS.SOS] }
+  const existing = await prisma.tourist.findFirst({
+    where: {
+      device_id,
+      status: { in: [TOURIST_STATUS.ACTIVE, TOURIST_STATUS.SOS] }
+    }
   });
 
   if (existing) {
     throw new ApiError(409, 'Device is currently in use by another tourist', 'DEVICE_IN_USE');
   }
 
-  const tourist = new Tourist({
-    name,
-    phone,
-    device_id,
-    emergency_contact,
-    trip_start: trip_start || new Date(),
-    trip_end
+  const tourist = await prisma.tourist.create({
+    data: {
+      name,
+      phone,
+      device_id,
+      emergency_contact,
+      trip_start: trip_start || new Date(),
+      trip_end
+    }
   });
 
-  await tourist.save();
   logger.info(`Tourist registered: ${name} with device ${device_id}`);
 
   res.status(201).json(successResponse(tourist, 'Tourist registered successfully'));
@@ -47,7 +49,9 @@ exports.register = asyncHandler(async (req, res) => {
  * GET /api/tourist/:id
  */
 exports.getById = asyncHandler(async (req, res) => {
-  const tourist = await Tourist.findById(req.params.id);
+  const tourist = await prisma.tourist.findUnique({
+    where: { id: req.params.id }
+  });
 
   if (!tourist) {
     throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
@@ -64,17 +68,22 @@ exports.getHistory = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { limit = 100 } = req.query;
 
-  const tourist = await Tourist.findById(id);
+  const tourist = await prisma.tourist.findUnique({
+    where: { id }
+  });
+
   if (!tourist) {
     throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
   }
 
-  const logs = await LocationLog.find({
-    tourist_id: id,
-    timestamp: { $gte: tourist.trip_start }
-  })
-    .sort({ timestamp: 1 })
-    .limit(parseInt(limit));
+  const logs = await prisma.locationLog.findMany({
+    where: {
+      tourist_id: id,
+      timestamp: { gte: tourist.trip_start }
+    },
+    orderBy: { timestamp: 'asc' },
+    take: parseInt(limit)
+  });
 
   res.json(successResponse({
     tourist,
@@ -88,9 +97,12 @@ exports.getHistory = asyncHandler(async (req, res) => {
  * GET /api/tourist/active
  */
 exports.getActive = asyncHandler(async (req, res) => {
-  const tourists = await Tourist.find({
-    status: { $in: [TOURIST_STATUS.ACTIVE, TOURIST_STATUS.SOS] }
-  }).sort({ last_seen: -1 });
+  const tourists = await prisma.tourist.findMany({
+    where: {
+      status: { in: [TOURIST_STATUS.ACTIVE, TOURIST_STATUS.SOS] }
+    },
+    orderBy: { last_seen: 'desc' }
+  });
 
   res.json(successResponse({
     count: tourists.length,
@@ -112,12 +124,16 @@ exports.getAll = asyncHandler(async (req, res) => {
 
   const skip = (parseInt(page) - 1) * parseInt(limit);
 
-  const tourists = await Tourist.find(filter)
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
+  const tourists = await prisma.tourist.findMany({
+    where: filter,
+    orderBy: { createdAt: 'desc' },
+    skip: skip,
+    take: parseInt(limit)
+  });
 
-  const total = await Tourist.countDocuments(filter);
+  const total = await prisma.tourist.count({
+    where: filter
+  });
 
   res.json(successResponse({
     tourists,
@@ -142,19 +158,25 @@ exports.updateStatus = asyncHandler(async (req, res) => {
     throw new ApiError(400, `Invalid status. Valid values: ${Object.values(TOURIST_STATUS).join(', ')}`, 'INVALID_STATUS');
   }
 
-  const tourist = await Tourist.findByIdAndUpdate(
-    id,
-    { status },
-    { new: true }
-  );
+  // Check if tourist exists first? Prisma update throws record not found error if ID missing, 
+  // but let's conform to existing pattern where we handle it.
+  // Actually, standard Prisma `update` throws specific error which global handler might catch, 
+  // but simpler to try/catch or just update.
 
-  if (!tourist) {
-    throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
+  try {
+    const tourist = await prisma.tourist.update({
+      where: { id },
+      data: { status }
+    });
+
+    logger.info(`Tourist ${tourist.name} status updated to ${status}`);
+    res.json(successResponse(tourist, 'Status updated'));
+  } catch (error) {
+    if (error.code === 'P2025') { // Record to update not found
+      throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
+    }
+    throw error;
   }
-
-  logger.info(`Tourist ${tourist.name} status updated to ${status}`);
-
-  res.json(successResponse(tourist, 'Status updated'));
 });
 
 /**
@@ -164,19 +186,23 @@ exports.updateStatus = asyncHandler(async (req, res) => {
 exports.endTrip = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  const tourist = await Tourist.findById(id);
+  try {
+    const tourist = await prisma.tourist.update({
+      where: { id },
+      data: {
+        status: TOURIST_STATUS.FINISHED,
+        trip_end: new Date()
+      }
+    });
 
-  if (!tourist) {
-    throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
+    logger.info(`Trip ended for tourist: ${tourist.name}`);
+    res.json(successResponse(tourist, 'Trip ended successfully'));
+  } catch (error) {
+    if (error.code === 'P2025') {
+      throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');
+    }
+    throw error;
   }
-
-  tourist.status = TOURIST_STATUS.FINISHED;
-  tourist.trip_end = new Date();
-  await tourist.save();
-
-  logger.info(`Trip ended for tourist: ${tourist.name}`);
-
-  res.json(successResponse(tourist, 'Trip ended successfully'));
 });
 
 /**
@@ -186,9 +212,11 @@ exports.endTrip = asyncHandler(async (req, res) => {
 exports.getByDeviceId = asyncHandler(async (req, res) => {
   const { deviceId } = req.params;
 
-  const tourist = await Tourist.findOne({
-    device_id: deviceId.toUpperCase(),
-    status: { $ne: TOURIST_STATUS.FINISHED }
+  const tourist = await prisma.tourist.findFirst({
+    where: {
+      device_id: deviceId.toUpperCase(), // Assuming device_id in DB is case sensitive matching input
+      status: { not: TOURIST_STATUS.FINISHED }
+    }
   });
 
   if (!tourist) {
@@ -209,13 +237,16 @@ exports.search = asyncHandler(async (req, res) => {
     return res.json(successResponse([]));
   }
 
-  const tourists = await Tourist.find({
-    $or: [
-      { name: { $regex: q, $options: 'i' } },
-      { phone: { $regex: q, $options: 'i' } },
-      { device_id: { $regex: q.toUpperCase(), $options: 'i' } }
-    ]
-  }).limit(20);
+  const tourists = await prisma.tourist.findMany({
+    where: {
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q, mode: 'insensitive' } },
+        { device_id: { contains: q.toUpperCase(), mode: 'insensitive' } }
+      ]
+    },
+    take: 20
+  });
 
   res.json(successResponse(tourists));
 });
@@ -225,7 +256,9 @@ exports.search = asyncHandler(async (req, res) => {
  * GET /api/tourist/:id/location
  */
 exports.getLocation = asyncHandler(async (req, res) => {
-  const tourist = await Tourist.findById(req.params.id);
+  const tourist = await prisma.tourist.findUnique({
+    where: { id: req.params.id }
+  });
 
   if (!tourist) {
     throw new ApiError(404, 'Tourist not found', 'NOT_FOUND');

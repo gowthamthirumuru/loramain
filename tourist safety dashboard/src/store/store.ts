@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
 import type {
     Alert,
     Emergency,
@@ -10,129 +10,10 @@ import type {
     DashboardMetrics,
     SystemStatus,
     Tourist,
+    Anchor,
 } from '../types/types';
-
-// ============================================
-// Initial Mock Data
-// ============================================
-
-const initialAlerts: Alert[] = [
-    {
-        id: 'ALT-001',
-        type: 'SOS',
-        severity: 'critical',
-        location: 'Taj Mahal, Agra',
-        coordinates: '27.1751, 78.0421',
-        tourist: 'John Smith',
-        phone: '+1-555-0123',
-        description: 'Tourist reported being followed by suspicious individuals',
-        time: '2 minutes ago',
-        createdAt: new Date().toISOString(),
-        status: 'active',
-        assignedTeam: 'Alpha Team',
-        priority: 1,
-    },
-    {
-        id: 'ALT-002',
-        type: 'Medical Emergency',
-        severity: 'high',
-        location: 'Red Fort, Delhi',
-        coordinates: '28.6562, 77.2410',
-        tourist: 'Sarah Johnson',
-        phone: '+44-7700-900123',
-        description: 'Tourist collapsed, possible heat stroke',
-        time: '8 minutes ago',
-        createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
-        status: 'responding',
-        assignedTeam: 'Bravo Team',
-        priority: 2,
-    },
-    {
-        id: 'ALT-003',
-        type: 'Theft',
-        severity: 'medium',
-        location: 'Marine Drive, Mumbai',
-        coordinates: '18.9220, 72.8347',
-        tourist: 'Maria Garcia',
-        phone: '+34-600-123456',
-        description: 'Purse stolen while taking photos, passport missing',
-        time: '15 minutes ago',
-        createdAt: new Date(Date.now() - 15 * 60000).toISOString(),
-        status: 'investigating',
-        assignedTeam: 'Charlie Team',
-        priority: 3,
-    },
-];
-
-const initialEmergencies: Emergency[] = [
-    {
-        id: 'EMG-001',
-        type: 'Medical Emergency',
-        location: 'Red Fort, Delhi',
-        tourist: 'Sarah Johnson',
-        severity: 'critical',
-        timeElapsed: '8 minutes',
-        createdAt: new Date(Date.now() - 8 * 60000).toISOString(),
-        assignedTeam: 'Bravo',
-        status: 'in_progress',
-        coordinates: '28.6562, 77.2410',
-    },
-    {
-        id: 'EMG-002',
-        type: 'Security Threat',
-        location: 'Taj Mahal, Agra',
-        tourist: 'John Smith',
-        severity: 'high',
-        timeElapsed: '2 minutes',
-        createdAt: new Date(Date.now() - 2 * 60000).toISOString(),
-        assignedTeam: 'Alpha',
-        status: 'dispatched',
-        coordinates: '27.1751, 78.0421',
-    },
-];
-
-const initialTeams: ResponseTeam[] = [
-    { id: 'Alpha-5', name: 'Alpha Team', location: 'Mumbai Central', type: 'Medical', status: 'available', members: 4, eta: '4 min' },
-    { id: 'Bravo-8', name: 'Bravo Team', location: 'Delhi CP', type: 'Security', status: 'responding', members: 3, eta: '6 min' },
-    { id: 'Charlie-3', name: 'Charlie Team', location: 'Agra Station', type: 'Tourist Aid', status: 'available', members: 5, eta: '8 min' },
-    { id: 'Delta-1', name: 'Delta Team', location: 'Jaipur Zone', type: 'Search & Rescue', status: 'patrol', members: 4, eta: '5 min' },
-];
-
-const initialConversations: Conversation[] = [
-    {
-        id: 1,
-        participant: 'Alpha Team Leader',
-        type: 'radio',
-        status: 'active',
-        lastMessage: 'Responding to SOS at Taj Mahal, ETA 3 minutes',
-        time: '2m ago',
-        priority: 'high',
-        unread: 2,
-    },
-    {
-        id: 2,
-        participant: 'Tourist - John Smith',
-        type: 'phone',
-        status: 'waiting',
-        lastMessage: 'Need help with directions to hotel',
-        time: '5m ago',
-        priority: 'medium',
-        unread: 1,
-    },
-];
-
-const initialMessages: Message[] = [
-    { id: 1, conversationId: 1, sender: 'Alpha Team Leader', message: 'Responding to SOS at Taj Mahal, ETA 3 minutes', time: '14:32', isOwnMessage: false },
-    { id: 2, conversationId: 1, sender: 'Command Center', message: 'Copy that. Medical unit standing by.', time: '14:33', isOwnMessage: true },
-    { id: 3, conversationId: 1, sender: 'Alpha Team Leader', message: 'Arrived on scene. Tourist is conscious. Requesting medical support.', time: '14:35', isOwnMessage: false },
-    { id: 4, conversationId: 1, sender: 'Command Center', message: 'Medical team dispatched. ETA 2 minutes.', time: '14:36', isOwnMessage: true },
-];
-
-const initialNotifications: Notification[] = [
-    { id: 1, type: 'emergency', title: 'Critical Alert - Medical Emergency', message: 'Tourist emergency at Taj Mahal requires immediate response', time: '2 min ago', read: false, severity: 'critical' },
-    { id: 2, type: 'system', title: 'System Update Complete', message: 'GPS tracking system successfully updated', time: '15 min ago', read: false, severity: 'info' },
-    { id: 3, type: 'weather', title: 'Weather Advisory', message: 'Heavy rain expected in Mumbai region', time: '1 hour ago', read: true, severity: 'warning' },
-];
+import { alertsApi, emergenciesApi, teamsApi, communicationsApi, dashboardApi, touristsApi, anchorsApi, apiClient } from '../api/api';
+import { toast } from 'sonner';
 
 // ============================================
 // Store Interface
@@ -147,12 +28,15 @@ interface DashboardStore {
     messages: Message[];
     notifications: Notification[];
     tourists: Tourist[];
+    anchors: Anchor[];
 
     // UI State
     activeView: string;
     selectedAlertId: string | null;
     selectedConversationId: number | null;
     searchQuery: string;
+    isLoading: boolean;
+    lastUpdated: Date | null;
 
     // Metrics
     metrics: DashboardMetrics;
@@ -200,35 +84,38 @@ export const useDashboardStore = create<DashboardStore>()(
     devtools(
         (set, get) => ({
             // Initial Data
-            alerts: initialAlerts,
-            emergencies: initialEmergencies,
-            teams: initialTeams,
-            conversations: initialConversations,
-            messages: initialMessages,
-            notifications: initialNotifications,
+            alerts: [],
+            emergencies: [],
+            teams: [],
+            conversations: [],
+            messages: [],
+            notifications: [],
             tourists: [],
+            anchors: [],
 
             // Initial UI State
             activeView: 'overview',
             selectedAlertId: null,
             selectedConversationId: null,
             searchQuery: '',
+            isLoading: false,
+            lastUpdated: null,
 
             // Initial Metrics
             metrics: {
-                activeEmergencies: 2,
-                avgResponseTime: 5.8,
-                availableTeams: 8,
-                totalTeams: 12,
-                touristsTracked: 12847,
-                touristsChange: 247,
+                activeEmergencies: 0,
+                avgResponseTime: 0,
+                availableTeams: 0,
+                totalTeams: 0,
+                touristsTracked: 0,
+                touristsChange: 0,
             },
 
             systemStatus: {
                 gpsTracking: 'online',
                 communications: 'online',
                 database: 'online',
-                websocket: 'connected',
+                websocket: 'connecting',
             },
 
             // Alert Actions
@@ -237,20 +124,34 @@ export const useDashboardStore = create<DashboardStore>()(
                 metrics: { ...state.metrics, activeEmergencies: state.metrics.activeEmergencies + 1 }
             })),
 
-            updateAlertStatus: (id, status) => set((state) => ({
-                alerts: state.alerts.map((a) =>
-                    a.id === id ? { ...a, status, time: 'just now' } : a
-                ),
-            })),
+            updateAlertStatus: (id, status) => {
+                // Optimistic update
+                set((state) => ({
+                    alerts: state.alerts.map((a) =>
+                        a.id === id ? { ...a, status, time: 'just now' } : a
+                    ),
+                }));
+                // Call API
+                alertsApi.updateStatus(id, status).catch(err => {
+                    toast.error('Failed to update alert status');
+                    get().refreshData(); // Revert on error
+                });
+            },
 
-            assignTeamToAlert: (alertId, teamId) => set((state) => ({
-                alerts: state.alerts.map((a) =>
-                    a.id === alertId ? { ...a, assignedTeam: teamId } : a
-                ),
-                teams: state.teams.map((t) =>
-                    t.id === teamId ? { ...t, status: 'responding' as const, currentAssignment: alertId } : t
-                ),
-            })),
+            assignTeamToAlert: (alertId, teamId) => {
+                set((state) => ({
+                    alerts: state.alerts.map((a) =>
+                        a.id === alertId ? { ...a, assignedTeam: teamId } : a
+                    ),
+                    teams: state.teams.map((t) =>
+                        t.id === teamId ? { ...t, status: 'responding' as const, currentAssignment: alertId } : t
+                    ),
+                }));
+                alertsApi.assignTeam(alertId, teamId).catch(err => {
+                    toast.error('Failed to assign team');
+                    get().refreshData();
+                });
+            },
 
             // Emergency Actions
             addEmergency: (emergency) => set((state) => ({
@@ -258,30 +159,54 @@ export const useDashboardStore = create<DashboardStore>()(
                 metrics: { ...state.metrics, activeEmergencies: state.metrics.activeEmergencies + 1 }
             })),
 
-            updateEmergencyStatus: (id, status) => set((state) => ({
-                emergencies: state.emergencies.map((e) =>
-                    e.id === id ? { ...e, status } : e
-                ),
-            })),
+            updateEmergencyStatus: (id, status) => {
+                set((state) => ({
+                    emergencies: state.emergencies.map((e) =>
+                        e.id === id ? { ...e, status } : e
+                    ),
+                }));
+                emergenciesApi.updateStatus(id, status).catch(err => {
+                    toast.error('Failed to update emergency status');
+                    get().refreshData();
+                });
+            },
 
-            resolveEmergency: (id) => set((state) => ({
-                emergencies: state.emergencies.filter((e) => e.id !== id),
-                metrics: { ...state.metrics, activeEmergencies: Math.max(0, state.metrics.activeEmergencies - 1) }
-            })),
+            resolveEmergency: (id) => {
+                set((state) => ({
+                    emergencies: state.emergencies.filter((e) => e.id !== id),
+                    metrics: { ...state.metrics, activeEmergencies: Math.max(0, state.metrics.activeEmergencies - 1) }
+                }));
+                emergenciesApi.resolve(id).catch(err => {
+                    toast.error('Failed to resolve emergency');
+                    get().refreshData();
+                });
+            },
 
             // Team Actions
-            updateTeamStatus: (id, status) => set((state) => ({
-                teams: state.teams.map((t) =>
-                    t.id === id ? { ...t, status } : t
-                ),
-            })),
+            updateTeamStatus: (id, status) => {
+                set((state) => ({
+                    teams: state.teams.map((t) =>
+                        t.id === id ? { ...t, status } : t
+                    ),
+                }));
+                teamsApi.updateStatus(id, status).catch(err => {
+                    toast.error('Failed to update team status');
+                    get().refreshData();
+                });
+            },
 
-            deployTeam: (teamId, assignmentId) => set((state) => ({
-                teams: state.teams.map((t) =>
-                    t.id === teamId ? { ...t, status: 'responding' as const, currentAssignment: assignmentId } : t
-                ),
-                metrics: { ...state.metrics, availableTeams: state.metrics.availableTeams - 1 }
-            })),
+            deployTeam: (teamId, assignmentId) => {
+                set((state) => ({
+                    teams: state.teams.map((t) =>
+                        t.id === teamId ? { ...t, status: 'responding' as const, currentAssignment: assignmentId } : t
+                    ),
+                    metrics: { ...state.metrics, availableTeams: state.metrics.availableTeams - 1 }
+                }));
+                teamsApi.deploy(teamId, assignmentId).catch(err => {
+                    toast.error('Failed to deploy team');
+                    get().refreshData();
+                });
+            },
 
             // Conversation Actions
             addConversation: (conversation) => set((state) => ({
@@ -327,10 +252,39 @@ export const useDashboardStore = create<DashboardStore>()(
             setSelectedConversation: (id) => set({ selectedConversationId: id }),
             setSearchQuery: (query) => set({ searchQuery: query }),
 
-            // Data refresh (placeholder for API integration)
+            // Data refresh
             refreshData: async () => {
-                // This will be implemented when connecting to the backend
-                console.log('Refreshing data...');
+                const state = get();
+                // Prevent multiple simultaneous refreshes if already loading?
+                // For now, let's allow it but set loading
+                set({ isLoading: true });
+
+                try {
+                    const [metrics, alerts, emergencies, teams, conversations, tourists, anchors] = await Promise.all([
+                        dashboardApi.getMetrics().catch(e => state.metrics),
+                        alertsApi.getAll().catch(e => []),
+                        emergenciesApi.getAll().catch(e => []),
+                        teamsApi.getAll().catch(e => []),
+                        communicationsApi.getConversations().catch(e => []),
+                        touristsApi.getAll().catch(e => []),
+                        anchorsApi.getAll().catch(e => [])
+                    ]);
+
+                    set({
+                        metrics,
+                        alerts,
+                        emergencies,
+                        teams,
+                        conversations,
+                        tourists,
+                        anchors,
+                        isLoading: false,
+                        lastUpdated: new Date()
+                    });
+                } catch (error) {
+                    console.error('Failed to refresh data', error);
+                    set({ isLoading: false });
+                }
             },
         }),
         { name: 'TouristDashboard' }
@@ -341,6 +295,8 @@ export const useDashboardStore = create<DashboardStore>()(
 // Selector Hooks
 // ============================================
 
+export const useTourists = () => useDashboardStore((state) => state.tourists);
+export const useAnchors = () => useDashboardStore((state) => state.anchors);
 export const useAlerts = () => useDashboardStore((state) => state.alerts);
 export const useEmergencies = () => useDashboardStore((state) => state.emergencies);
 export const useTeams = () => useDashboardStore((state) => state.teams);

@@ -88,7 +88,8 @@ const validateSOSResolution = (req, res, next) => {
     }
 
     // Check if valid MongoDB ObjectId format
-    if (!/^[0-9a-fA-F]{24}$/.test(sos_id)) {
+    // Check for valid ID (generic)
+    if (!sos_id) {
         return next(new ApiError(400, 'Invalid sos_id format', 'VALIDATION_ERROR'));
     }
 
@@ -99,7 +100,7 @@ const validateSOSResolution = (req, res, next) => {
 const validateObjectId = (paramName) => (req, res, next) => {
     const id = req.params[paramName];
 
-    if (!id || !/^[0-9a-fA-F]{24}$/.test(id)) {
+    if (!id) {
         return next(new ApiError(400, `Invalid ${paramName} format`, 'VALIDATION_ERROR'));
     }
 

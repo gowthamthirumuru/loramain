@@ -4,7 +4,8 @@
  */
 
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { prisma } = require('../config/db');
+const logger = require('../utils/logger'); // Assuming logger exists
 
 // ============================================
 // JWT Authentication
@@ -28,7 +29,11 @@ const authenticateJWT = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await User.findById(decoded.id);
+
+    // Find user using Prisma
+    const user = await prisma.user.findUnique({
+      where: { id: decoded.id }
+    });
 
     if (!user) {
       return res.status(401).json({
@@ -125,7 +130,7 @@ const authenticateGateway = (req, res, next) => {
   if (apiKey !== process.env.GATEWAY_API_KEY) {
     return res.status(403).json({
       success: false,
-      error: 'Invalid API key',
+      error: 'Invalid API key with Gateway',
       code: 'INVALID_API_KEY'
     });
   }

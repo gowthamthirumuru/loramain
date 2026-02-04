@@ -26,6 +26,8 @@ export interface Tourist {
   emergencyContact?: string;
   registrationDate: string;
   lastSeen?: string;
+  status?: string;
+  device_id?: string;
 }
 
 export interface GeoLocation {
@@ -143,6 +145,20 @@ export interface GeneratedReport {
   size?: string;
   downloads?: number;
   downloadUrl?: string;
+}
+
+// ============================================
+// Anchor Types
+// ============================================
+
+export interface Anchor {
+  id: string;
+  anchor_id: string;
+  name: string;
+  local_position: { x: number; y: number };
+  gps_position?: { lat: number; lng: number };
+  status: string;
+  last_heartbeat?: string;
 }
 
 // ============================================

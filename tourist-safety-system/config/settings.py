@@ -39,7 +39,7 @@ SERIAL_PORT = "/dev/ttyS0"
 # 2.0 = Open Space (Line of Sight)
 # 3.0 = Urban / Trees / Light obstacles
 # 4.0 = Indoor / Walls / Heavy obstacles (USE THIS FOR ROOM TESTING!)
-ENV_FACTOR_N = 4.0  # ← CHANGED FOR INDOOR TESTING
+ENV_FACTOR_N = 2.2 # ← CHANGED FOR INDOOR TESTING
 
 # Measured RSSI at 1 meter distance 
 # CALIBRATED: Measured -15 dBm at exactly 1 meter (2026-01-27)

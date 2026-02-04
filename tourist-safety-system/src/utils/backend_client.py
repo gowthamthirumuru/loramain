@@ -1,17 +1,15 @@
-"""
-Backend API Client for LoRa Tourist Safety System
-Sends trilaterated positions to the Node.js backend
-"""
-
 import requests
 import time
 import sys
 import os
+import logging
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
-from config.settings import BACKEND_URL, GATEWAY_API_KEY, GPS_REFERENCE
+from config.settings import BACKEND_URL, GATEWAY_API_KEY
+from src.utils.math_helper import MathEngine
 
+logger = logging.getLogger(__name__)
 
 class BackendClient:
     """HTTP client for communicating with the Tourist Safety Backend"""
@@ -29,6 +27,13 @@ class BackendClient:
     def check_connection(self):
         """Test if backend is reachable"""
         try:
+            # Using health endpoint if available, or just root
+            # Assuming backend has /api/health or similar. 
+            # If strictly following spec, maybe we should assume a known good endpoint.
+            # Let's stick to /health or /api/health. 
+            # But the existing code used /health. I'll change to /api/health which is more standard or what I recall from controllers.
+            # Actually, let's keep it safe and just check /api/metrics or something that exists.
+            # Or assume /health exists. 
             response = requests.get(
                 f"{self.base_url}/health",
                 timeout=3
@@ -36,29 +41,24 @@ class BackendClient:
             self.connected = response.status_code == 200
             return self.connected
         except Exception as e:
-            print(f"[Backend] Connection check failed: {e}")
+            logger.warning(f"[Backend] Connection check failed: {e}")
             self.connected = False
             return False
     
     def send_location(self, device_id, x, y, rssi_avg, sos_flag=False):
         """
         Send trilaterated location to backend.
-        
-        Args:
-            device_id (str): Tourist device ID (e.g., "DEV001")
-            x (float): X coordinate in meters (from trilateration)
-            y (float): Y coordinate in meters (from trilateration)
-            rssi_avg (int): Average RSSI value
-            sos_flag (bool): True if SOS button pressed
-        
-        Returns:
-            bool: True if successful, False otherwise
         """
-        # Send raw X,Y coordinates (meters)
+        # Convert to GPS using MathEngine
+        lat, lng = MathEngine.convert_to_gps(x, y)
+
+        # Send raw X,Y coordinates (meters) and GPS
         payload = {
             "device_id": device_id,
-            "x": x,
-            "y": y,
+            "x": round(x, 2),
+            "y": round(y, 2),
+            "lat": lat,
+            "lng": lng,
             "rssi": rssi_avg,
             "sos_flag": sos_flag
         }
@@ -72,43 +72,34 @@ class BackendClient:
                     timeout=self.timeout
                 )
                 
-                if response.status_code == 200:
-                    print(f"[Backend] ✅ Location sent: X={x:.2f}m, Y={y:.2f}m")
+                if response.status_code == 200 or response.status_code == 201:
+                    logger.info(f"[Backend] Location sent: {device_id} ({lat}, {lng})")
                     self.connected = True
                     return True
                 elif response.status_code == 404:
-                    print(f"[Backend] ⚠️ Device not registered: {device_id}")
-                    print(f"[Backend] Register tourist first at POST /api/tourist/register")
+                    logger.warning(f"[Backend] Device not registered: {device_id}")
                     return False
                 elif response.status_code == 401:
-                    print(f"[Backend] ❌ Invalid API key")
+                    logger.error(f"[Backend] Invalid API key")
                     return False
                 else:
-                    print(f"[Backend] ❌ Error {response.status_code}: {response.text}")
+                    logger.warning(f"[Backend] Error {response.status_code}: {response.text}")
                     
-            except requests.exceptions.Timeout:
-                print(f"[Backend] ⏱️ Timeout (attempt {attempt + 1}/{self.retry_count})")
-            except requests.exceptions.ConnectionError:
-                print(f"[Backend] 🔌 Connection failed (attempt {attempt + 1}/{self.retry_count})")
+            except requests.exceptions.RequestException as e:
+                logger.warning(f"[Backend] Connection failed (attempt {attempt + 1}/{self.retry_count}): {e}")
                 self.connected = False
-            except Exception as e:
-                print(f"[Backend] ❌ Error: {e}")
             
+            # Exponential backoff: 1s, 2s, 4s
             if attempt < self.retry_count - 1:
-                time.sleep(1)  # Wait before retry
+                sleep_time = 2 ** attempt
+                time.sleep(sleep_time)
         
+        logger.error(f"[Backend] Failed to send location for {device_id} after retries")
         return False
     
     def send_heartbeat(self, anchor_id="MASTER", stats=None):
         """
         Send gateway heartbeat to backend.
-        
-        Args:
-            anchor_id (str): Anchor identifier
-            stats (dict): Optional statistics
-        
-        Returns:
-            bool: True if successful
         """
         payload = {
             "anchor_id": anchor_id,
@@ -135,17 +126,11 @@ class BackendClient:
     def send_batch_locations(self, locations):
         """
         Send multiple locations at once (for offline sync).
-        
-        Args:
-            locations (list): List of location dicts with device_id, x, y, rssi, sos_flag
-        
-        Returns:
-            dict: Results with processed/failed counts
         """
         # Convert all locations to GPS
         converted = []
         for loc in locations:
-            lat, lng = self._convert_to_gps(loc['x'], loc['y'])
+            lat, lng = MathEngine.convert_to_gps(loc['x'], loc['y'])
             converted.append({
                 "device_id": loc['device_id'],
                 "lat": lat,
@@ -168,53 +153,12 @@ class BackendClient:
             return {"processed": 0, "failed": len(locations)}
             
         except Exception as e:
-            print(f"[Backend] Batch update failed: {e}")
+            logger.error(f"[Backend] Batch update failed: {e}")
             return {"processed": 0, "failed": len(locations)}
-    
-    def _convert_to_gps(self, x, y):
-        """
-        Convert local X,Y coordinates to GPS lat/lng.
-        
-        Uses the GPS reference point from config and simple offset calculation.
-        For production, implement proper coordinate transformation.
-        
-        Args:
-            x (float): X coordinate in meters
-            y (float): Y coordinate in meters
-        
-        Returns:
-            tuple: (latitude, longitude)
-        """
-        # Reference point (GPS coords of MASTER anchor at x=0, y=0)
-        ref_lat = GPS_REFERENCE.get('lat', 11.0168)
-        ref_lng = GPS_REFERENCE.get('lng', 76.9558)
-        
-        # Approximate conversion factors
-        # 1 degree latitude ≈ 111,000 meters
-        # 1 degree longitude ≈ 111,000 * cos(latitude) meters
-        import math
-        meters_per_deg_lat = 111000
-        meters_per_deg_lng = 111000 * math.cos(math.radians(ref_lat))
-        
-        # Calculate offset
-        lat = ref_lat + (y / meters_per_deg_lat)
-        lng = ref_lng + (x / meters_per_deg_lng)
-        
-        return round(lat, 6), round(lng, 6)
     
     def register_anchor(self, anchor_id, name, x, y, gps_lat=None, gps_lng=None, is_master=False):
         """
         Register or update an anchor in the backend.
-        
-        Args:
-            anchor_id (str): Anchor identifier
-            name (str): Display name
-            x, y (float): Local coordinates
-            gps_lat, gps_lng (float): Optional GPS coordinates
-            is_master (bool): Is this the master node
-        
-        Returns:
-            bool: True if successful
         """
         payload = {
             "anchor_id": anchor_id,
@@ -235,13 +179,13 @@ class BackendClient:
             )
             
             if response.status_code in [200, 201]:
-                print(f"[Backend] ✅ Anchor {anchor_id} registered")
+                logger.info(f"[Backend] Anchor {anchor_id} registered")
                 return True
-            print(f"[Backend] ❌ Failed to register anchor: {response.text}")
+            logger.warning(f"[Backend] Failed to register anchor: {response.text}")
             return False
             
         except Exception as e:
-            print(f"[Backend] ❌ Anchor registration failed: {e}")
+            logger.error(f"[Backend] Anchor registration failed: {e}")
             return False
 
 

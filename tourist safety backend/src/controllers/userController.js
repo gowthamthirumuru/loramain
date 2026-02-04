@@ -1,36 +1,45 @@
 /**
  * User Controller
- * CRUD operations for user management (admin only)
+ * Admin user management
  */
 
-const User = require('../models/User');
+const { prisma } = require('../config/db');
 const { asyncHandler, ApiError } = require('../middleware/errorHandler');
 const { successResponse } = require('../utils/helpers');
 const bcrypt = require('bcryptjs');
 
 /**
- * @swagger
- * /api/users:
- *   get:
- *     summary: Get all users
- *     tags: [Users]
- *     security:
- *       - bearerAuth: []
+ * Get All Users
+ * GET /api/users
  */
 exports.getAll = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 20, role, status } = req.query;
+    const { role, status, page = 1, limit = 20 } = req.query;
 
     const filter = {};
     if (role) filter.role = role;
     if (status) filter.status = status;
 
-    const users = await User.find(filter)
-        .select('-passwordHash -salt -refreshToken')
-        .limit(parseInt(limit))
-        .skip((parseInt(page) - 1) * parseInt(limit))
-        .sort({ createdAt: -1 });
+    const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    const total = await User.countDocuments(filter);
+    const users = await prisma.user.findMany({
+        where: filter,
+        select: {
+            id: true,
+            username: true,
+            email: true,
+            name: true,
+            role: true,
+            status: true,
+            phone: true,
+            lastLogin: true,
+            createdAt: true
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: skip,
+        take: parseInt(limit)
+    });
+
+    const total = await prisma.user.count({ where: filter });
 
     res.json(successResponse({
         users,
@@ -44,15 +53,69 @@ exports.getAll = asyncHandler(async (req, res) => {
 });
 
 /**
- * @swagger
- * /api/users/{id}:
- *   get:
- *     summary: Get user by ID
- *     tags: [Users]
+ * Create User (Admin only)
+ * POST /api/users
+ */
+exports.create = asyncHandler(async (req, res) => {
+    const { username, email, password, name, role, phone } = req.body;
+
+    const existingUser = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { email },
+                { username }
+            ]
+        }
+    });
+
+    if (existingUser) {
+        throw new ApiError(409, 'User with this email or username already exists');
+    }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const user = await prisma.user.create({
+        data: {
+            username,
+            email,
+            passwordHash,
+            salt,
+            name,
+            role: role || 'operator',
+            phone
+        }
+    });
+
+    // Remove sensitive data from response
+    const safeUser = { ...user };
+    delete safeUser.passwordHash;
+    delete safeUser.salt;
+
+    res.status(201).json(successResponse(safeUser, 'User created successfully'));
+});
+
+/**
+ * Get User by ID
+ * GET /api/users/:id
  */
 exports.getById = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.params.id)
-        .select('-passwordHash -salt -refreshToken');
+    const user = await prisma.user.findUnique({
+        where: { id: req.params.id },
+        select: {
+            id: true,
+            username: true,
+            email: true,
+            name: true,
+            role: true,
+            status: true,
+            phone: true,
+            lastLogin: true,
+            preferences: true,
+            createdAt: true
+        }
+    });
 
     if (!user) {
         throw new ApiError(404, 'User not found');
@@ -62,92 +125,63 @@ exports.getById = asyncHandler(async (req, res) => {
 });
 
 /**
- * @swagger
- * /api/users:
- *   post:
- *     summary: Create new user
- *     tags: [Users]
- */
-exports.create = asyncHandler(async (req, res) => {
-    const { username, email, password, name, role, phone } = req.body;
-
-    // Check if user exists
-    const existing = await User.findOne({ $or: [{ email }, { username }] });
-    if (existing) {
-        throw new ApiError(400, 'User with this email or username already exists');
-    }
-
-    // Hash password
-    const passwordHash = await bcrypt.hash(password, 12);
-
-    const user = await User.create({
-        username,
-        email,
-        passwordHash,
-        name,
-        role: role || 'operator',
-        phone
-    });
-
-    res.status(201).json(successResponse({
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        name: user.name,
-        role: user.role
-    }, 'User created successfully'));
-});
-
-/**
- * @swagger
- * /api/users/{id}:
- *   put:
- *     summary: Update user
- *     tags: [Users]
+ * Update User
+ * PUT /api/users/:id
  */
 exports.update = asyncHandler(async (req, res) => {
-    const { name, role, status, phone, preferences } = req.body;
+    const { name, role, status, phone, email } = req.body;
 
-    const user = await User.findByIdAndUpdate(
-        req.params.id,
-        { name, role, status, phone, preferences },
-        { new: true, runValidators: true }
-    ).select('-passwordHash -salt -refreshToken');
+    // TODO: Add unique check if email/username is changed
 
-    if (!user) {
-        throw new ApiError(404, 'User not found');
+    try {
+        const user = await prisma.user.update({
+            where: { id: req.params.id },
+            data: { name, role, status, phone, email },
+            select: {
+                id: true,
+                username: true,
+                email: true,
+                name: true,
+                role: true,
+                status: true,
+                phone: true,
+                updatedAt: true
+            }
+        });
+        res.json(successResponse(user, 'User updated'));
+    } catch (error) {
+        if (error.code === 'P2025') {
+            throw new ApiError(404, 'User not found');
+        }
+        throw error;
     }
-
-    res.json(successResponse(user, 'User updated'));
 });
 
 /**
- * @swagger
- * /api/users/{id}:
- *   delete:
- *     summary: Delete user (soft delete - set status to inactive)
- *     tags: [Users]
+ * Delete User
+ * DELETE /api/users/:id
  */
 exports.delete = asyncHandler(async (req, res) => {
-    const user = await User.findByIdAndUpdate(
-        req.params.id,
-        { status: 'inactive' },
-        { new: true }
-    );
-
-    if (!user) {
-        throw new ApiError(404, 'User not found');
+    if (req.params.id === req.user.id) {
+        throw new ApiError(400, 'Cannot delete your own account');
     }
 
-    res.json(successResponse(null, 'User deactivated'));
+    try {
+        await prisma.user.delete({
+            where: { id: req.params.id }
+        });
+        res.json(successResponse(null, 'User deleted'));
+    } catch (error) {
+        if (error.code === 'P2025') {
+            throw new ApiError(404, 'User not found');
+        }
+        throw error;
+    }
 });
 
 /**
- * @swagger
- * /api/users/{id}/reset-password:
- *   post:
- *     summary: Reset user password (admin)
- *     tags: [Users]
+ * Reset User Password
+ * POST /api/users/:id/reset-password
  */
 exports.resetPassword = asyncHandler(async (req, res) => {
     const { newPassword } = req.body;
@@ -156,16 +190,19 @@ exports.resetPassword = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'Password must be at least 8 characters');
     }
 
-    const passwordHash = await bcrypt.hash(newPassword, 12);
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(newPassword, salt);
 
-    const user = await User.findByIdAndUpdate(
-        req.params.id,
-        { passwordHash, loginAttempts: 0, lockUntil: null }
-    );
-
-    if (!user) {
-        throw new ApiError(404, 'User not found');
+    try {
+        await prisma.user.update({
+            where: { id: req.params.id },
+            data: { passwordHash, salt, loginAttempts: 0, lockUntil: null }
+        });
+        res.json(successResponse(null, 'Password reset successfully'));
+    } catch (error) {
+        if (error.code === 'P2025') {
+            throw new ApiError(404, 'User not found');
+        }
+        throw error;
     }
-
-    res.json(successResponse(null, 'Password reset successfully'));
 });

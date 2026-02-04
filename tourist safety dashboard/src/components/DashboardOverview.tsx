@@ -32,15 +32,29 @@ export function DashboardOverview() {
   const emergencies = useEmergencies();
   const storeAlerts = useAlerts();
   const teams = useTeams();
-  const { updateEmergencyStatus, deployTeam, setActiveView } = useDashboardStore();
+  const { updateEmergencyStatus, deployTeam, setActiveView, refreshData } = useDashboardStore();
 
   // Filter available teams with useMemo for stable reference
   const availableTeams = useMemo(() => teams.filter(t => t.status === 'available'), [teams]);
 
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+    // Initial fetch
+    refreshData();
+
+    // Poll every 10 seconds
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      refreshData();
+    }, 10000); // 10s poll
+
+    // Separate clock timer update every second for smoother UI
+    const clockTimer = setInterval(() => setCurrentTime(new Date()), 1000);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(clockTimer);
+    };
+  }, [refreshData]);
 
   // Critical Metrics - now using store data
   const metricsDisplay = [

@@ -7,7 +7,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
-const mongoSanitize = require('express-mongo-sanitize');
 const xss = require('xss-clean');
 const swaggerUi = require('swagger-ui-express');
 const swaggerJsdoc = require('swagger-jsdoc');
@@ -73,9 +72,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'X-API-Key'],
   credentials: true
 }));
-
-// Sanitize data against NoSQL injection
-app.use(mongoSanitize());
 
 // Sanitize data against XSS attacks
 app.use(xss());

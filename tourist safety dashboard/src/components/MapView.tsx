@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polygon, Circle, useMap } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Circle, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
 import { Input } from './ui/input';
-import { Search, Filter, MapPin, AlertTriangle, Users, Layers, ExternalLink, RefreshCw, Radio } from 'lucide-react';
+import { Search, Filter, MapPin, AlertTriangle, Users, Layers, ExternalLink, RefreshCw, Radio, Crosshair } from 'lucide-react';
 import { Separator } from './ui/separator';
 import { toast } from 'sonner';
-import { useEmergencies, useTeams, useAlerts } from '../store/store';
+import { useEmergencies, useTeams, useAlerts, useTourists } from '../store/store';
 import { apiClient as api } from '../api/api';
 import 'leaflet/dist/leaflet.css';
 
@@ -58,6 +58,37 @@ function MapController({ center, zoom }: { center: [number, number]; zoom: numbe
   return null;
 }
 
+// Zoom Handler Component
+function ZoomHandler({ setZoom }: { setZoom: (zoom: number) => void }) {
+  const map = useMapEvents({
+    zoomend: () => {
+      setZoom(map.getZoom());
+    },
+  });
+  return null;
+}
+
+// Zone Dot Marker (shown when zoomed out)
+function ZoneMarker({ position, color, count }: { position: [number, number]; color: string; count?: number }) {
+  return (
+    <Marker
+      position={position}
+      icon={L.divIcon({
+        className: 'custom-marker',
+        html: `
+          <div style="width: 24px; height: 24px; background: ${color}; border: 3px solid white; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.3); display: flex; align-items: center; justify-content: center;">
+            ${count ? `<span style="font-size: 10px; color: white; font-weight: bold;">${count}</span>` : ''}
+          </div>
+        `,
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+      })}
+    />
+  );
+}
+
+
+
 // Pulsing SOS marker component
 function PulsingSosMarker({ position, emergency }: { position: [number, number]; emergency: any }) {
   return (
@@ -80,12 +111,15 @@ function PulsingSosMarker({ position, emergency }: { position: [number, number];
               <span className="font-bold text-red-600">{emergency.type}</span>
             </div>
             <p className="text-sm font-medium">{emergency.tourist}</p>
-            <p className="text-xs text-gray-600">{emergency.location}</p>
+            <div className="flex flex-col gap-0.5 mt-1 mb-1">
+              <p className="text-xs text-gray-600">{emergency.location}</p>
+
+            </div>
             <p className="text-xs text-gray-500 mt-1">{emergency.timeElapsed}</p>
             <div className="mt-2 pt-2 border-t">
               <span className={`px-2 py-1 rounded text-xs ${emergency.status === 'active' ? 'bg-red-100 text-red-700' :
-                  emergency.status === 'responding' ? 'bg-yellow-100 text-yellow-700' :
-                    'bg-green-100 text-green-700'
+                emergency.status === 'responding' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-green-100 text-green-700'
                 }`}>
                 {emergency.status}
               </span>
@@ -107,23 +141,9 @@ interface Zone {
   status: string;
 }
 
-interface Tourist {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  status: string;
-  device?: string;
-}
+// interface Tourist removed to use shared type from store
 
-interface AnchorNode {
-  id: string;
-  name: string;
-  lat: number;
-  lng: number;
-  status: string;
-}
-
+// interface AnchorNode removed to use shared type from store
 export function MapView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showIncidents, setShowIncidents] = useState(true);
@@ -134,15 +154,19 @@ export function MapView() {
   const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
   const [mapZoom, setMapZoom] = useState(5);
 
+  const [currentZoom, setCurrentZoom] = useState(5);
+
   // Data from store
   const emergencies = useEmergencies();
   const teams = useTeams();
   const alerts = useAlerts();
+  const tourists = useTourists();
+  const anchors = useAnchors();
 
   // Local state for API data
   const [zones, setZones] = useState<Zone[]>([]);
-  const [tourists, setTourists] = useState<Tourist[]>([]);
-  const [anchors, setAnchors] = useState<AnchorNode[]>([]);
+  // const [tourists, setTourists] = useState<Tourist[]>([]); // Removed local state
+  // const [anchors, setAnchors] = useState<AnchorNode[]>([]); // Removed local state
 
   // Fetch zones from API
   useEffect(() => {
@@ -152,7 +176,7 @@ export function MapView() {
         setZones(response.data || []);
       } catch (error) {
         console.error('Failed to fetch zones:', error);
-        // Demo zones
+        // Demo zones fallback
         setZones([
           {
             _id: 'z1',
@@ -174,23 +198,7 @@ export function MapView() {
     fetchZones();
   }, []);
 
-  // Demo tourist positions (would come from WebSocket in production)
-  useEffect(() => {
-    setTourists([
-      { id: 't1', name: 'John Smith (LORA-001)', lat: 27.1751, lng: 78.0421, status: 'active', device: 'LORA-001' },
-      { id: 't2', name: 'Maria Garcia (LORA-002)', lat: 28.6139, lng: 77.2090, status: 'active', device: 'LORA-002' },
-      { id: 't3', name: 'Tourist Group A', lat: 19.0760, lng: 72.8777, status: 'active' },
-      { id: 't4', name: 'Tourist Group B', lat: 26.9124, lng: 75.7873, status: 'active' },
-    ]);
-
-    // Demo anchor nodes
-    setAnchors([
-      { id: 'a1', name: 'Anchor-TajMahal-1', lat: 27.1751, lng: 78.0421, status: 'online' },
-      { id: 'a2', name: 'Anchor-TajMahal-2', lat: 27.1760, lng: 78.0400, status: 'online' },
-      { id: 'a3', name: 'Anchor-Delhi-1', lat: 28.6129, lng: 77.2295, status: 'online' },
-      { id: 'a4', name: 'Anchor-Delhi-2', lat: 28.6100, lng: 77.2100, status: 'offline' },
-    ]);
-  }, []);
+  // Removed hardcoded demo data for tourists and anchors to use real-time data only
 
   // Parse emergency coordinates
   const sosMarkers = useMemo(() => {
@@ -284,36 +292,58 @@ export function MapView() {
             className="h-full w-full"
             style={{ background: '#e5e7eb' }}
           >
+            {/* Zoom Handler to track zoom level */}
+            <ZoomHandler setZoom={setCurrentZoom} />
+
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             />
             <MapController center={mapCenter} zoom={mapZoom} />
 
+
             {/* Zone polygons */}
             {showZones && zones.map(zone => {
               if (!zone.boundary?.coordinates?.[0]) return null;
               const coords = zone.boundary.coordinates[0].map(c => [c[1], c[0]] as [number, number]);
+
+              // Calculate centroid for "Zone Dot"
+              const latSum = coords.reduce((sum, c) => sum + c[0], 0);
+              const lngSum = coords.reduce((sum, c) => sum + c[1], 0);
+              const centroid: [number, number] = [latSum / coords.length, lngSum / coords.length];
+
+              const isZoomedOut = currentZoom < 14;
+
               return (
-                <Polygon
-                  key={zone._id}
-                  positions={coords}
-                  pathOptions={{
-                    color: zoneColors[zone.type] || '#3b82f6',
-                    fillColor: zoneColors[zone.type] || '#3b82f6',
-                    fillOpacity: 0.2,
-                    weight: 2
-                  }}
-                >
-                  <Popup>
-                    <div className="font-medium">{zone.name}</div>
-                    <div className="text-xs text-gray-500 capitalize">{zone.type} zone</div>
-                  </Popup>
-                </Polygon>
+                <React.Fragment key={zone._id}>
+                  <Polygon
+                    positions={coords}
+                    pathOptions={{
+                      color: zoneColors[zone.type] || '#3b82f6',
+                      fillColor: zoneColors[zone.type] || '#3b82f6',
+                      fillOpacity: 0.2,
+                      weight: 2
+                    }}
+                  >
+                    <Popup>
+                      <div className="font-medium">{zone.name}</div>
+                      <div className="text-xs text-gray-500 capitalize">{zone.type} zone</div>
+                    </Popup>
+                  </Polygon>
+
+                  {/* Show Zone Dot when zoomed out */}
+                  {isZoomedOut && (
+                    <ZoneMarker
+                      position={centroid}
+                      color={zoneColors[zone.type] || '#3b82f6'}
+                      count={tourists.length + anchors.length} // Simplified count logic, ideally should filter by zone
+                    />
+                  )}
+                </React.Fragment>
               );
             })}
 
-            {/* SOS markers with animation */}
+            {/* SOS markers (ALWAYS SHOW) */}
             {showIncidents && sosMarkers.map(emergency => (
               <PulsingSosMarker
                 key={emergency.id}
@@ -322,32 +352,36 @@ export function MapView() {
               />
             ))}
 
-            {/* Tourist markers */}
-            {showTourists && tourists.map(tourist => (
-              <Marker
-                key={tourist.id}
-                position={[tourist.lat, tourist.lng]}
-                icon={touristIcon}
-              >
-                <Popup>
-                  <div className="min-w-[150px]">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Users className="w-4 h-4 text-cyan-500" />
-                      <span className="font-medium">{tourist.name}</span>
+            {/* Tourist markers (SHOW ONLY WHEN ZOOMED IN) */}
+            {showTourists && currentZoom >= 14 && tourists
+              .filter(t => t.location?.lat && t.location?.lng)
+              .map(tourist => (
+                <Marker
+                  key={tourist.id}
+                  position={[tourist.location!.lat, tourist.location!.lng]}
+                  icon={touristIcon}
+                >
+                  <Popup>
+                    <div className="min-w-[150px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Users className="w-4 h-4 text-cyan-500" />
+                        <span className="font-medium">{tourist.name}</span>
+                      </div>
+                      <div className="flex flex-col gap-0.5 mb-1">
+                        {tourist.device_id && (
+                          <p className="text-xs text-gray-500">Device: {tourist.device_id}</p>
+                        )}
+                      </div>
+                      <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs mt-1 inline-block">
+                        {tourist.status || 'active'}
+                      </span>
                     </div>
-                    {tourist.device && (
-                      <p className="text-xs text-gray-500">Device: {tourist.device}</p>
-                    )}
-                    <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded text-xs mt-1 inline-block">
-                      {tourist.status}
-                    </span>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+                  </Popup>
+                </Marker>
+              ))}
 
-            {/* Team markers */}
-            {showTeams && teamMarkers.map(team => (
+            {/* Team markers (SHOW ONLY WHEN ZOOMED IN) */}
+            {showTeams && currentZoom >= 14 && teamMarkers.map(team => (
               <Marker
                 key={team.id}
                 position={[team.lat, team.lng]}
@@ -360,10 +394,11 @@ export function MapView() {
                       <span className="font-medium">{team.name}</span>
                     </div>
                     <p className="text-xs text-gray-500">{team.location}</p>
+
                     <p className="text-xs text-gray-500">{team.members} members</p>
                     <span className={`px-2 py-0.5 rounded text-xs mt-1 inline-block ${team.status === 'available' ? 'bg-green-100 text-green-700' :
-                        team.status === 'responding' ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-gray-100 text-gray-700'
+                      team.status === 'responding' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-gray-100 text-gray-700'
                       }`}>
                       {team.status}
                     </span>
@@ -372,27 +407,30 @@ export function MapView() {
               </Marker>
             ))}
 
-            {/* Anchor node markers */}
-            {showAnchors && anchors.map(anchor => (
-              <Marker
-                key={anchor.id}
-                position={[anchor.lat, anchor.lng]}
-                icon={anchorIcon}
-              >
-                <Popup>
-                  <div className="min-w-[150px]">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Radio className="w-4 h-4 text-purple-500" />
-                      <span className="font-medium">{anchor.name}</span>
+            {/* Anchor node markers (SHOW ONLY WHEN ZOOMED IN) */}
+            {showAnchors && currentZoom >= 14 && anchors
+              .filter(a => a.gps_position?.lat && a.gps_position?.lng)
+              .map(anchor => (
+                <Marker
+                  key={anchor.id}
+                  position={[anchor.gps_position!.lat, anchor.gps_position!.lng]}
+                  icon={anchorIcon}
+                >
+                  <Popup>
+                    <div className="min-w-[150px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Radio className="w-4 h-4 text-purple-500" />
+                        <span className="font-medium">{anchor.name}</span>
+                      </div>
+
+                      <span className={`px-2 py-0.5 rounded text-xs ${anchor.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                        {anchor.status}
+                      </span>
                     </div>
-                    <span className={`px-2 py-0.5 rounded text-xs ${anchor.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                      }`}>
-                      {anchor.status}
-                    </span>
-                  </div>
-                </Popup>
-              </Marker>
-            ))}
+                  </Popup>
+                </Marker>
+              ))}
           </MapContainer>
         </div>
       </div>

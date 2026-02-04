@@ -70,9 +70,10 @@ const startServer = async () => {
       });
 
       // Close database connection
-      const mongoose = require('mongoose');
-      await mongoose.connection.close();
-      logger.info('MongoDB connection closed');
+      // Close database connection
+      const { prisma } = require('./config/db');
+      await prisma.$disconnect();
+      logger.info('Prisma connection closed');
 
       process.exit(0);
     };

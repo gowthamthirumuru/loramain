@@ -3,10 +3,7 @@
  * Handles communication with the LoRa Master Node (Gateway)
  */
 
-const Anchor = require('../models/Anchor');
-const Tourist = require('../models/Tourist');
-const LocationLog = require('../models/LocationLog');
-const SOSAlert = require('../models/SOSAlert');
+const { prisma } = require('../config/db');
 const socketService = require('../utils/socketService');
 const logger = require('../utils/logger');
 const { asyncHandler, ApiError } = require('../middleware/errorHandler');
@@ -19,27 +16,45 @@ const { SOCKET_EVENTS, LIMITS, TOURIST_STATUS } = require('../config/constants')
  */
 exports.heartbeat = asyncHandler(async (req, res) => {
     const { anchor_id, firmware_version, stats } = req.body;
+    const targetAnchorId = anchor_id || 'MASTER';
 
-    let anchor = await Anchor.findOne({ anchor_id: anchor_id || 'MASTER' });
+    let anchor = await prisma.anchor.findUnique({
+        where: { anchor_id: targetAnchorId }
+    });
 
     if (!anchor) {
         // Create master anchor if doesn't exist
-        anchor = new Anchor({
-            anchor_id: anchor_id || 'MASTER',
-            name: 'Master Gateway',
-            local_position: { x: 0, y: 0 },
-            is_master: true
+        anchor = await prisma.anchor.create({
+            data: {
+                anchor_id: targetAnchorId,
+                name: 'Master Gateway',
+                local_position: { x: 0, y: 0 },
+                is_master: true,
+                status: 'online',
+                last_heartbeat: new Date(),
+                hardware: firmware_version ? { firmware_version } : {},
+                stats: stats || {}
+            }
+        });
+    } else {
+        // Update existing
+        const updateData = {
+            last_heartbeat: new Date(),
+            status: 'online'
+        };
+
+        if (firmware_version) {
+            updateData.hardware = { ...(anchor.hardware || {}), firmware_version };
+        }
+        if (stats) {
+            updateData.stats = { ...(anchor.stats || {}), ...stats };
+        }
+
+        anchor = await prisma.anchor.update({
+            where: { id: anchor.id },
+            data: updateData
         });
     }
-
-    anchor.last_heartbeat = new Date();
-    anchor.status = 'online';
-    if (firmware_version) anchor.hardware.firmware_version = firmware_version;
-    if (stats) {
-        anchor.stats = { ...anchor.stats, ...stats };
-    }
-
-    await anchor.save();
 
     logger.info('Gateway heartbeat received', { anchor_id: anchor.anchor_id });
 
@@ -76,56 +91,70 @@ exports.batchUpdate = asyncHandler(async (req, res) => {
             const { device_id, lat, lng, rssi, sos_flag, timestamp } = loc;
 
             // Find tourist
-            const tourist = await Tourist.findOne({
-                device_id,
-                status: { $ne: TOURIST_STATUS.FINISHED }
+            const tourist = await prisma.tourist.findUnique({
+                where: { device_id }
             });
 
-            if (!tourist) {
+            if (!tourist || tourist.status === TOURIST_STATUS.FINISHED) {
                 results.failed++;
-                results.errors.push({ device_id, error: 'Device not registered' });
+                results.errors.push({ device_id, error: 'Device not registered or finished' });
                 continue;
             }
 
             // Save location log
-            await LocationLog.create({
-                device_id,
-                tourist_id: tourist._id,
-                latitude: lat,
-                longitude: lng,
-                rssi,
-                is_sos: sos_flag || false,
-                timestamp: timestamp ? new Date(timestamp) : new Date()
+            await prisma.locationLog.create({
+                data: {
+                    device_id,
+                    tourist_id: tourist.id,
+                    lat: parseFloat(lat),
+                    lng: parseFloat(lng),
+                    x: 0, // Fallback if not provided
+                    y: 0, // Fallback
+                    rssi: parseFloat(rssi),
+                    is_sos: sos_flag || false,
+                    timestamp: timestamp ? new Date(timestamp) : new Date()
+                }
             });
 
             // Update tourist status
-            tourist.last_location = { lat, lng };
-            tourist.last_seen = new Date();
+            let updateData = {
+                last_location: { lat, lng },
+                last_seen: new Date()
+            };
 
             if (sos_flag) {
-                tourist.status = TOURIST_STATUS.SOS;
-                await SOSAlert.create({
-                    tourist_id: tourist._id,
-                    device_id,
-                    location: { lat, lng }
+                updateData.status = TOURIST_STATUS.SOS;
+
+                await prisma.sOSAlert.create({
+                    data: {
+                        tourist_id: tourist.id,
+                        device_id,
+                        location: { lat, lng }
+                    }
                 });
                 logger.logSOS(tourist.name, device_id, { lat, lng });
             } else {
-                tourist.status = TOURIST_STATUS.ACTIVE;
+                if (tourist.status !== TOURIST_STATUS.SOS) {
+                    updateData.status = TOURIST_STATUS.ACTIVE;
+                }
             }
 
-            await tourist.save();
+            const updatedTourist = await prisma.tourist.update({
+                where: { id: tourist.id },
+                data: updateData
+            });
+
             results.processed++;
 
             // Emit real-time update
             try {
                 const io = socketService.getIO();
                 io.emit(SOCKET_EVENTS.LOCATION_UPDATE, {
-                    tourist_id: tourist._id,
-                    name: tourist.name,
+                    tourist_id: updatedTourist.id,
+                    name: updatedTourist.name,
                     lat,
                     lng,
-                    status: tourist.status,
+                    status: updatedTourist.status,
                     sos: sos_flag || false
                 });
             } catch (err) {
@@ -148,13 +177,13 @@ exports.batchUpdate = asyncHandler(async (req, res) => {
  * GET /api/gateway/config
  */
 exports.getConfig = asyncHandler(async (req, res) => {
-    const anchors = await Anchor.find().select('anchor_id name local_position gps_position is_master');
+    const anchors = await prisma.anchor.findMany();
 
     const config = {
         anchors: anchors.reduce((acc, a) => {
             acc[a.anchor_id] = {
-                x: a.local_position.x,
-                y: a.local_position.y,
+                x: a.local_position?.x || 0,
+                y: a.local_position?.y || 0,
                 gps: a.gps_position,
                 is_master: a.is_master
             };
@@ -177,17 +206,24 @@ exports.updateAnchorStatus = asyncHandler(async (req, res) => {
     const { id } = req.params;
     const { status, stats } = req.body;
 
-    const anchor = await Anchor.findOne({ anchor_id: id.toUpperCase() });
+    let anchor = await prisma.anchor.findUnique({
+        where: { anchor_id: id.toUpperCase() }
+    });
 
     if (!anchor) {
         throw new ApiError(404, 'Anchor not found', 'NOT_FOUND');
     }
 
-    if (status) anchor.status = status;
-    if (stats) anchor.stats = { ...anchor.stats, ...stats };
-    anchor.last_heartbeat = new Date();
+    const updateData = {
+        last_heartbeat: new Date()
+    };
+    if (status) updateData.status = status;
+    if (stats) updateData.stats = { ...(anchor.stats || {}), ...stats };
 
-    await anchor.save();
+    anchor = await prisma.anchor.update({
+        where: { id: anchor.id },
+        data: updateData
+    });
 
     // Emit anchor status update
     try {
@@ -209,7 +245,12 @@ exports.updateAnchorStatus = asyncHandler(async (req, res) => {
  * GET /api/gateway/anchors
  */
 exports.getAllAnchors = asyncHandler(async (req, res) => {
-    const anchors = await Anchor.find().sort({ is_master: -1, anchor_id: 1 });
+    const anchors = await prisma.anchor.findMany({
+        orderBy: [
+            { is_master: 'desc' },
+            { anchor_id: 'asc' }
+        ]
+    });
     res.json(successResponse(anchors));
 });
 
@@ -224,29 +265,39 @@ exports.registerAnchor = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'anchor_id, name, and local_position are required', 'VALIDATION_ERROR');
     }
 
-    let anchor = await Anchor.findOne({ anchor_id: anchor_id.toUpperCase() });
+    const targetId = anchor_id.toUpperCase();
+
+    let anchor = await prisma.anchor.findUnique({
+        where: { anchor_id: targetId }
+    });
 
     if (anchor) {
         // Update existing
-        anchor.name = name;
-        anchor.local_position = local_position;
-        if (gps_position) anchor.gps_position = gps_position;
-        if (is_master !== undefined) anchor.is_master = is_master;
-    } else {
-        // Create new
-        anchor = new Anchor({
-            anchor_id: anchor_id.toUpperCase(),
+        const updateData = {
             name,
             local_position,
-            gps_position,
-            is_master: is_master || false
+            is_master: is_master !== undefined ? is_master : anchor.is_master
+        };
+        if (gps_position) updateData.gps_position = gps_position;
+
+        anchor = await prisma.anchor.update({
+            where: { id: anchor.id },
+            data: updateData
+        });
+    } else {
+        // Create new
+        anchor = await prisma.anchor.create({
+            data: {
+                anchor_id: targetId,
+                name,
+                local_position,
+                gps_position,
+                is_master: is_master || false
+            }
         });
     }
 
-    await anchor.save();
     logger.info(`Anchor registered: ${anchor.anchor_id}`);
 
-    res.status(anchor.isNew ? 201 : 200).json(successResponse(anchor,
-        anchor.isNew ? 'Anchor registered' : 'Anchor updated'
-    ));
+    res.status(200).json(successResponse(anchor, 'Anchor registered/updated'));
 });

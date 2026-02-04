@@ -1,12 +1,7 @@
-/**
- * Auth Controller
- * Handles user authentication - register, login, logout, refresh tokens
- */
-
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { validationResult, body } = require('express-validator');
-const User = require('../models/User');
+const { prisma } = require('../config/db'); // Use Prisma
 const { asyncHandler, ApiError } = require('../middleware/errorHandler');
 const { successResponse } = require('../utils/helpers');
 const logger = require('../utils/logger');
@@ -98,8 +93,13 @@ exports.register = asyncHandler(async (req, res) => {
     const { username, email, password, name, phone } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({
-        $or: [{ email }, { username }]
+    const existingUser = await prisma.user.findFirst({
+        where: {
+            OR: [
+                { email },
+                { username }
+            ]
+        }
     });
 
     if (existingUser) {
@@ -113,38 +113,44 @@ exports.register = asyncHandler(async (req, res) => {
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
 
+    const refreshToken = ""; // Placeholder, generated later
+
     // Create user
-    const user = new User({
-        username,
-        email,
-        passwordHash,
-        name,
-        phone,
-        role: 'operator' // Default role
+    const user = await prisma.user.create({
+        data: {
+            username,
+            email,
+            passwordHash,
+            salt, // Storing for legacy reasons if needed, though bcrypt in hash is safer
+            name,
+            phone,
+            role: 'operator',
+            refreshToken
+        }
     });
 
-    await user.save();
-
     // Generate tokens
-    const token = generateToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    const token = generateToken(user.id);
+    const tokenRefresh = generateRefreshToken(user.id); // Renamed to avoid const collision
 
     // Save refresh token
-    user.refreshToken = refreshToken;
-    await user.save();
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { refreshToken: tokenRefresh }
+    });
 
     logger.info(`New user registered: ${email}`);
 
     res.status(201).json(successResponse({
         user: {
-            id: user._id,
+            id: user.id,
             username: user.username,
             email: user.email,
             name: user.name,
             role: user.role
         },
         token,
-        refreshToken
+        refreshToken: tokenRefresh
     }, 'Registration successful'));
 });
 
@@ -157,15 +163,17 @@ exports.login = asyncHandler(async (req, res) => {
 
     const { email, password } = req.body;
 
-    // Find user with password fields
-    const user = await User.findOne({ email }).select('+passwordHash +salt +refreshToken');
+    // Find user by email
+    const user = await prisma.user.findUnique({
+        where: { email }
+    });
 
     if (!user) {
         throw new ApiError(401, 'Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    // Check if account is locked
-    if (user.isLocked) {
+    // Check if account is locked (using basic math since virtuals don't exist in Prisma)
+    if (user.lockUntil && new Date(user.lockUntil) > new Date()) {
         throw new ApiError(423, 'Account is temporarily locked. Please try again later.', 'ACCOUNT_LOCKED');
     }
 
@@ -179,36 +187,49 @@ exports.login = asyncHandler(async (req, res) => {
 
     if (!isMatch) {
         // Increment login attempts
-        user.loginAttempts = (user.loginAttempts || 0) + 1;
+        const attempts = (user.loginAttempts || 0) + 1;
+        let lockUntil = user.lockUntil;
 
         // Lock account after 5 failed attempts
-        if (user.loginAttempts >= 5) {
-            user.lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
-            await user.save();
+        if (attempts >= 5) {
+            lockUntil = new Date(Date.now() + 30 * 60 * 1000); // 30 minutes
+        }
+
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { loginAttempts: attempts, lockUntil }
+        });
+
+        if (attempts >= 5) {
             throw new ApiError(423, 'Too many failed attempts. Account locked for 30 minutes.', 'ACCOUNT_LOCKED');
         }
 
-        await user.save();
         throw new ApiError(401, 'Invalid email or password', 'INVALID_CREDENTIALS');
     }
 
-    // Reset login attempts on successful login
-    user.loginAttempts = 0;
-    user.lockUntil = undefined;
-    user.lastLogin = new Date();
+    // Reset login attempts keys on successful login
+    await prisma.user.update({
+        where: { id: user.id },
+        data: {
+            loginAttempts: 0,
+            lockUntil: null,
+            lastLogin: new Date(),
+            refreshToken: generateRefreshToken(user.id) // Generate new refresh token
+        }
+    });
 
-    // Generate tokens
-    const token = generateToken(user._id);
-    const refreshToken = generateRefreshToken(user._id);
+    // We need to fetch the updated user to get the new refreshToken
+    const updatedUser = await prisma.user.findUnique({
+        where: { id: user.id },
+    });
 
-    user.refreshToken = refreshToken;
-    await user.save();
+    const token = generateToken(user.id);
 
     logger.info(`User logged in: ${email}`);
 
     res.json(successResponse({
         user: {
-            id: user._id,
+            id: user.id,
             username: user.username,
             email: user.email,
             name: user.name,
@@ -216,7 +237,7 @@ exports.login = asyncHandler(async (req, res) => {
             preferences: user.preferences
         },
         token,
-        refreshToken
+        refreshToken: updatedUser.refreshToken
     }, 'Login successful'));
 });
 
@@ -227,7 +248,10 @@ exports.login = asyncHandler(async (req, res) => {
 exports.logout = asyncHandler(async (req, res) => {
     // Clear refresh token
     if (req.user) {
-        await User.findByIdAndUpdate(req.user._id, { refreshToken: null });
+        await prisma.user.update({
+            where: { id: req.user.id },
+            data: { refreshToken: null }
+        });
         logger.info(`User logged out: ${req.user.email}`);
     }
 
@@ -254,7 +278,9 @@ exports.refreshToken = asyncHandler(async (req, res) => {
         }
 
         // Find user with matching refresh token
-        const user = await User.findById(decoded.id).select('+refreshToken');
+        const user = await prisma.user.findUnique({
+            where: { id: decoded.id }
+        });
 
         if (!user || user.refreshToken !== refreshToken) {
             throw new ApiError(401, 'Invalid refresh token', 'INVALID_TOKEN');
@@ -265,11 +291,13 @@ exports.refreshToken = asyncHandler(async (req, res) => {
         }
 
         // Generate new tokens
-        const newToken = generateToken(user._id);
-        const newRefreshToken = generateRefreshToken(user._id);
+        const newToken = generateToken(user.id);
+        const newRefreshToken = generateRefreshToken(user.id);
 
-        user.refreshToken = newRefreshToken;
-        await user.save();
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { refreshToken: newRefreshToken }
+        });
 
         res.json(successResponse({
             token: newToken,
@@ -287,14 +315,16 @@ exports.refreshToken = asyncHandler(async (req, res) => {
  * GET /api/auth/me
  */
 exports.getMe = asyncHandler(async (req, res) => {
-    const user = await User.findById(req.user._id);
+    const user = await prisma.user.findUnique({
+        where: { id: req.user.id }
+    });
 
     if (!user) {
         throw new ApiError(404, 'User not found', 'NOT_FOUND');
     }
 
     res.json(successResponse({
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         name: user.name,
@@ -322,7 +352,9 @@ exports.updatePassword = asyncHandler(async (req, res) => {
         throw new ApiError(400, 'New password must be at least 8 characters', 'WEAK_PASSWORD');
     }
 
-    const user = await User.findById(req.user._id).select('+passwordHash');
+    const user = await prisma.user.findUnique({
+        where: { id: req.user.id }
+    });
 
     // Verify current password
     const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
@@ -332,12 +364,18 @@ exports.updatePassword = asyncHandler(async (req, res) => {
 
     // Hash new password
     const salt = await bcrypt.genSalt(12);
-    user.passwordHash = await bcrypt.hash(newPassword, salt);
-    await user.save();
+    const passwordHash = await bcrypt.hash(newPassword, salt);
+
+    await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, salt }
+    });
 
     logger.info(`Password updated for user: ${user.email}`);
 
     res.json(successResponse(null, 'Password updated successfully'));
 });
+
+
 
 module.exports = exports;

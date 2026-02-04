@@ -69,6 +69,36 @@ class MathEngine:
             print("ERROR: Anchors are collinear! Cannot trilaterate.")
             return None
 
+    @staticmethod
+    def convert_to_gps(x, y):
+        """
+        Converts local X,Y coordinates (meters) to GPS Latitude/Longitude.
+        
+        Args:
+            x (float): Local X coordinate in meters
+            y (float): Local Y coordinate in meters
+            
+        Returns:
+            tuple: (latitude, longitude)
+        """
+        from config.settings import GPS_REFERENCE
+        
+        ref_lat = GPS_REFERENCE['lat']
+        ref_lng = GPS_REFERENCE['lng']
+        
+        # Earth's radius in meters
+        R = 6378137
+        
+        # Coordinate offsets in radians
+        dLat = y / R
+        dLon = x / (R * math.cos(math.pi * ref_lat / 180))
+        
+        # New coordinates in degrees
+        lat = ref_lat + (dLat * 180 / math.pi)
+        lon = ref_lng + (dLon * 180 / math.pi)
+        
+        return round(lat, 6), round(lon, 6)
+
 
 # Alias for backward compatibility
 def calculate_distance(rssi):

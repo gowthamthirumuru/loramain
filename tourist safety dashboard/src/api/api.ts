@@ -8,6 +8,7 @@ import type {
     Tourist,
     GeneratedReport,
     DashboardMetrics,
+    Anchor,
 } from '../types/types';
 
 // ============================================
@@ -373,6 +374,21 @@ export const dashboardApi = {
             };
         }
         const response = await apiClient.get('/dashboard/analytics', { params: { timeRange } });
+        return response.data;
+    },
+};
+
+// ============================================
+// Anchors API
+// ============================================
+
+export const anchorsApi = {
+    getAll: async (): Promise<Anchor[]> => {
+        if (USE_MOCK) {
+            await delay(300);
+            return [];
+        }
+        const response = await apiClient.get<Anchor[]>('/anchors');
         return response.data;
     },
 };

@@ -4,7 +4,7 @@
  */
 
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { prisma } = require('../config/db');
 
 let io;
 
@@ -35,7 +35,18 @@ module.exports = {
         }
 
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        const user = await User.findById(decoded.id).select('-passwordHash -salt');
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.id }
+        });
+
+        // Remove passwordHash and salt manually if needed, or rely on just not sending it back.
+        // Prisma doesn't always strictly need .select() for internal logic unless we broadcast it.
+        // For safety, let's keep it clean if we attach to socket.
+
+        if (user) {
+          delete user.passwordHash;
+          delete user.salt;
+        }
 
         if (!user || user.status !== 'active') {
           return next(new Error('User not found or inactive'));
