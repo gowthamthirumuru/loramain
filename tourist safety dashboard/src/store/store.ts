@@ -1,299 +1,188 @@
+
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import type {
-    Alert,
-    Emergency,
-    ResponseTeam,
-    Conversation,
-    Message,
-    Notification,
-    DashboardMetrics,
-    SystemStatus,
-    Tourist,
-    Anchor,
-} from '../types/types';
-import { alertsApi, emergenciesApi, teamsApi, communicationsApi, dashboardApi, touristsApi, anchorsApi, apiClient } from '../api/api';
+import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
-
-// ============================================
-// Store Interface
-// ============================================
+import { Alert, Emergency, ResponseTeam, Tourist, Anchor } from '../types/types';
+import { alertsApi, emergenciesApi, teamsApi, communicationsApi, dashboardApi, touristsApi, anchorsApi } from '../api/api';
 
 interface DashboardStore {
-    // Data
     alerts: Alert[];
     emergencies: Emergency[];
     teams: ResponseTeam[];
-    conversations: Conversation[];
-    messages: Message[];
-    notifications: Notification[];
+    activeTeamId: string | null;
+    conversations: any[];
+    messages: any[];
+    notifications: any[];
+    metrics: any;
     tourists: Tourist[];
     anchors: Anchor[];
 
-    // UI State
-    activeView: string;
-    selectedAlertId: string | null;
-    selectedConversationId: number | null;
-    searchQuery: string;
-    isLoading: boolean;
-    lastUpdated: Date | null;
+    // System Status
+    systemStatus: {
+        gpsTracking: 'online' | 'offline' | 'degraded';
+        communications: 'online' | 'offline' | 'degraded';
+        database: 'online' | 'offline' | 'degraded';
+        websocket: 'online' | 'offline' | 'connecting';
+    };
 
-    // Metrics
-    metrics: DashboardMetrics;
-    systemStatus: SystemStatus;
-
-    // Alert Actions
+    // Actions
+    fetchInitialData: () => Promise<void>;
     addAlert: (alert: Alert) => void;
-    updateAlertStatus: (id: string, status: Alert['status']) => void;
-    assignTeamToAlert: (alertId: string, teamId: string) => void;
 
-    // Emergency Actions
-    addEmergency: (emergency: Emergency) => void;
-    updateEmergencyStatus: (id: string, status: Emergency['status']) => void;
-    resolveEmergency: (id: string) => void;
+    socket: Socket | null;
 
-    // Team Actions
-    updateTeamStatus: (id: string, status: ResponseTeam['status']) => void;
-    deployTeam: (teamId: string, assignmentId: string) => void;
+    // Socket Actions
+    connectSocket: () => void;
+    disconnectSocket: () => void;
 
-    // Conversation Actions
-    addConversation: (conversation: Conversation) => void;
-    addMessage: (message: Omit<Message, 'id'>) => void;
-    markConversationRead: (conversationId: number) => void;
-
-    // Notification Actions
-    addNotification: (notification: Omit<Notification, 'id'>) => void;
-    markNotificationRead: (id: number) => void;
-    markAllNotificationsRead: () => void;
-
-    // UI Actions
-    setActiveView: (view: string) => void;
-    setSelectedAlert: (id: string | null) => void;
-    setSelectedConversation: (id: number | null) => void;
-    setSearchQuery: (query: string) => void;
-
-    // Data refresh
-    refreshData: () => Promise<void>;
+    // Internal state updaters
+    handleLocationUpdate: (data: any) => void;
+    handleSOSAlert: (data: any) => void;
+    handleTouristOffline: (data: any) => void;
 }
-
-// ============================================
-// Store Implementation
-// ============================================
 
 export const useDashboardStore = create<DashboardStore>()(
     devtools(
         (set, get) => ({
-            // Initial Data
             alerts: [],
             emergencies: [],
             teams: [],
+            activeTeamId: null,
             conversations: [],
             messages: [],
             notifications: [],
+            metrics: null,
             tourists: [],
             anchors: [],
-
-            // Initial UI State
-            activeView: 'overview',
-            selectedAlertId: null,
-            selectedConversationId: null,
-            searchQuery: '',
-            isLoading: false,
-            lastUpdated: null,
-
-            // Initial Metrics
-            metrics: {
-                activeEmergencies: 0,
-                avgResponseTime: 0,
-                availableTeams: 0,
-                totalTeams: 0,
-                touristsTracked: 0,
-                touristsChange: 0,
-            },
-
             systemStatus: {
                 gpsTracking: 'online',
                 communications: 'online',
                 database: 'online',
-                websocket: 'connecting',
+                websocket: 'connecting'
             },
+            socket: null,
 
-            // Alert Actions
-            addAlert: (alert) => set((state) => ({
-                alerts: [alert, ...state.alerts],
-                metrics: { ...state.metrics, activeEmergencies: state.metrics.activeEmergencies + 1 }
-            })),
-
-            updateAlertStatus: (id, status) => {
-                // Optimistic update
-                set((state) => ({
-                    alerts: state.alerts.map((a) =>
-                        a.id === id ? { ...a, status, time: 'just now' } : a
-                    ),
-                }));
-                // Call API
-                alertsApi.updateStatus(id, status).catch(err => {
-                    toast.error('Failed to update alert status');
-                    get().refreshData(); // Revert on error
-                });
-            },
-
-            assignTeamToAlert: (alertId, teamId) => {
-                set((state) => ({
-                    alerts: state.alerts.map((a) =>
-                        a.id === alertId ? { ...a, assignedTeam: teamId } : a
-                    ),
-                    teams: state.teams.map((t) =>
-                        t.id === teamId ? { ...t, status: 'responding' as const, currentAssignment: alertId } : t
-                    ),
-                }));
-                alertsApi.assignTeam(alertId, teamId).catch(err => {
-                    toast.error('Failed to assign team');
-                    get().refreshData();
-                });
-            },
-
-            // Emergency Actions
-            addEmergency: (emergency) => set((state) => ({
-                emergencies: [emergency, ...state.emergencies],
-                metrics: { ...state.metrics, activeEmergencies: state.metrics.activeEmergencies + 1 }
-            })),
-
-            updateEmergencyStatus: (id, status) => {
-                set((state) => ({
-                    emergencies: state.emergencies.map((e) =>
-                        e.id === id ? { ...e, status } : e
-                    ),
-                }));
-                emergenciesApi.updateStatus(id, status).catch(err => {
-                    toast.error('Failed to update emergency status');
-                    get().refreshData();
-                });
-            },
-
-            resolveEmergency: (id) => {
-                set((state) => ({
-                    emergencies: state.emergencies.filter((e) => e.id !== id),
-                    metrics: { ...state.metrics, activeEmergencies: Math.max(0, state.metrics.activeEmergencies - 1) }
-                }));
-                emergenciesApi.resolve(id).catch(err => {
-                    toast.error('Failed to resolve emergency');
-                    get().refreshData();
-                });
-            },
-
-            // Team Actions
-            updateTeamStatus: (id, status) => {
-                set((state) => ({
-                    teams: state.teams.map((t) =>
-                        t.id === id ? { ...t, status } : t
-                    ),
-                }));
-                teamsApi.updateStatus(id, status).catch(err => {
-                    toast.error('Failed to update team status');
-                    get().refreshData();
-                });
-            },
-
-            deployTeam: (teamId, assignmentId) => {
-                set((state) => ({
-                    teams: state.teams.map((t) =>
-                        t.id === teamId ? { ...t, status: 'responding' as const, currentAssignment: assignmentId } : t
-                    ),
-                    metrics: { ...state.metrics, availableTeams: state.metrics.availableTeams - 1 }
-                }));
-                teamsApi.deploy(teamId, assignmentId).catch(err => {
-                    toast.error('Failed to deploy team');
-                    get().refreshData();
-                });
-            },
-
-            // Conversation Actions
-            addConversation: (conversation) => set((state) => ({
-                conversations: [conversation, ...state.conversations],
-            })),
-
-            addMessage: (message) => set((state) => ({
-                messages: [...state.messages, { ...message, id: state.messages.length + 1 }],
-                conversations: state.conversations.map((c) =>
-                    c.id === message.conversationId
-                        ? { ...c, lastMessage: message.message, time: 'just now' }
-                        : c
-                ),
-            })),
-
-            markConversationRead: (conversationId) => set((state) => ({
-                conversations: state.conversations.map((c) =>
-                    c.id === conversationId ? { ...c, unread: 0 } : c
-                ),
-                messages: state.messages.map((m) =>
-                    m.conversationId === conversationId ? { ...m, read: true } : m
-                ),
-            })),
-
-            // Notification Actions
-            addNotification: (notification) => set((state) => ({
-                notifications: [{ ...notification, id: state.notifications.length + 1 }, ...state.notifications],
-            })),
-
-            markNotificationRead: (id) => set((state) => ({
-                notifications: state.notifications.map((n) =>
-                    n.id === id ? { ...n, read: true } : n
-                ),
-            })),
-
-            markAllNotificationsRead: () => set((state) => ({
-                notifications: state.notifications.map((n) => ({ ...n, read: true })),
-            })),
-
-            // UI Actions
-            setActiveView: (view) => set({ activeView: view }),
-            setSelectedAlert: (id) => set({ selectedAlertId: id }),
-            setSelectedConversation: (id) => set({ selectedConversationId: id }),
-            setSearchQuery: (query) => set({ searchQuery: query }),
-
-            // Data refresh
-            refreshData: async () => {
-                const state = get();
-                // Prevent multiple simultaneous refreshes if already loading?
-                // For now, let's allow it but set loading
-                set({ isLoading: true });
-
+            fetchInitialData: async () => {
                 try {
-                    const [metrics, alerts, emergencies, teams, conversations, tourists, anchors] = await Promise.all([
-                        dashboardApi.getMetrics().catch(e => state.metrics),
-                        alertsApi.getAll().catch(e => []),
-                        emergenciesApi.getAll().catch(e => []),
-                        teamsApi.getAll().catch(e => []),
-                        communicationsApi.getConversations().catch(e => []),
-                        touristsApi.getAll().catch(e => []),
-                        anchorsApi.getAll().catch(e => [])
+                    const [alerts, emergencies, teams, tourists, anchors] = await Promise.all([
+                        alertsApi.getAll(),
+                        emergenciesApi.getAll(),
+                        teamsApi.getAll(),
+                        touristsApi.getAll(),
+                        anchorsApi.getAll()
                     ]);
-
-                    set({
-                        metrics,
-                        alerts,
-                        emergencies,
-                        teams,
-                        conversations,
-                        tourists,
-                        anchors,
-                        isLoading: false,
-                        lastUpdated: new Date()
-                    });
+                    set({ alerts, emergencies, teams, tourists, anchors });
                 } catch (error) {
-                    console.error('Failed to refresh data', error);
-                    set({ isLoading: false });
+                    console.error(error);
+                    toast.error('Failed to fetch initial data');
                 }
             },
+
+            addAlert: (alert) => set((state) => ({ alerts: [alert, ...state.alerts] })),
+
+            connectSocket: () => {
+                const existingSocket = get().socket;
+                if (existingSocket?.connected) return;
+
+                const socket = io('http://localhost:5000', {
+                    transports: ['websocket'],
+                    reconnection: true,
+                    reconnectionAttempts: 5,
+                    reconnectionDelay: 1000,
+                });
+
+                socket.on('connect', () => {
+                    set((state) => ({
+                        systemStatus: { ...state.systemStatus, websocket: 'online' }
+                    }));
+                    toast.success('Connected to real-time server');
+                    socket.emit('subscribe_sos');
+                });
+
+                socket.on('disconnect', () => {
+                    set((state) => ({
+                        systemStatus: { ...state.systemStatus, websocket: 'offline' }
+                    }));
+                    toast.error('Disconnected from real-time server');
+                });
+
+                socket.on('location_update', (data) => {
+                    get().handleLocationUpdate(data);
+                });
+
+                socket.on('sos_alert', (data) => {
+                    get().handleSOSAlert(data);
+                });
+
+                socket.on('tourist_offline', (data) => {
+                    get().handleTouristOffline(data);
+                });
+
+                set({ socket });
+            },
+
+            disconnectSocket: () => {
+                const socket = get().socket;
+                if (socket) {
+                    socket.disconnect();
+                    set({ socket: null });
+                }
+            },
+
+            handleLocationUpdate: (data) => {
+                set((state) => {
+                    const updatedTourists = state.tourists.map(t =>
+                        t.id === data.tourist_id ? {
+                            ...t,
+                            last_location: { x: data.x, y: data.y, lat: data.lat, lng: data.lng },
+                            status: data.status,
+                            last_seen: new Date(data.timestamp)
+                        } : t
+                    );
+                    return { tourists: updatedTourists };
+                });
+            },
+
+            handleSOSAlert: (data) => {
+                const newAlert: Alert = {
+                    id: data.sos_id || `alert-${Date.now()}`,
+                    type: 'sos',
+                    status: 'active',
+                    severity: 'critical',
+                    location: `Lat: ${data.location.lat}, Lng: ${data.location.lng}`,
+                    time: 'Just now',
+                    description: `SOS from ${data.tourist_name}`,
+                    assignedTeam: undefined,
+                    // Add missing required fields based on lint error: tourist, phone, createdAt, priority
+                    tourist: { name: data.tourist_name || 'Unknown', id: data.tourist_id || 'unknown' },
+                    phone: 'Unknown',
+                    createdAt: new Date().toISOString(),
+                    priority: 'high'
+                };
+
+                get().addAlert(newAlert);
+                toast.error(`SOS Alert: ${data.tourist_name}`);
+
+                set((state) => ({
+                    tourists: state.tourists.map(t =>
+                        t.id === data.tourist_id ? { ...t, status: 'sos' as const } : t
+                    )
+                }));
+            },
+
+            handleTouristOffline: (data) => {
+                set((state) => ({
+                    tourists: state.tourists.map(t =>
+                        t.id === data.tourist_id ? { ...t, status: 'offline' as const } : t
+                    )
+                }));
+                toast.warning(`Tourist ${data.name} is offline`);
+            },
         }),
-        { name: 'TouristDashboard' }
+        { name: 'DashboardStore' }
     )
 );
-
-// ============================================
-// Selector Hooks
-// ============================================
 
 export const useTourists = () => useDashboardStore((state) => state.tourists);
 export const useAnchors = () => useDashboardStore((state) => state.anchors);
@@ -305,10 +194,5 @@ export const useMessages = () => useDashboardStore((state) => state.messages);
 export const useNotifications = () => useDashboardStore((state) => state.notifications);
 export const useMetrics = () => useDashboardStore((state) => state.metrics);
 export const useSystemStatus = () => useDashboardStore((state) => state.systemStatus);
-
-// Computed selectors - return primitives instead of filtered arrays to avoid infinite loops
-export const useUnreadNotificationsCount = () =>
-    useDashboardStore((state) => state.notifications.filter((n) => !n.read).length);
-
-export const useAvailableTeamsCount = () =>
-    useDashboardStore((state) => state.teams.filter((t) => t.status === 'available').length);
+export const useUnreadNotificationsCount = () => useDashboardStore((state) => state.notifications.filter((n) => !n.read).length);
+export const useAvailableTeamsCount = () => useDashboardStore((state) => state.teams.filter((t) => t.status === 'available').length);

@@ -8,7 +8,7 @@ const socketService = require('../utils/socketService');
 const logger = require('../utils/logger');
 const { asyncHandler, ApiError } = require('../middleware/errorHandler');
 const { successResponse } = require('../utils/helpers');
-const { SOCKET_EVENTS, TOURIST_STATUS } = require('../config/constants');
+const { SOCKET_EVENTS, TOURIST_STATUS, LIMITS, GEO_BOUNDS } = require('../config/constants');
 
 /**
  * Update Location from Gateway
@@ -222,4 +222,92 @@ exports.getAllActive = asyncHandler(async (req, res) => {
     count: tourists.length,
     tourists: tourists
   }));
+});
+
+/**
+ * Helper: Validate Coordinates against Geo Bounds
+ */
+const isValidCoordinate = (lat, lng) => {
+  if (!lat || !lng) return false;
+  return (
+    lat >= GEO_BOUNDS.MIN_LAT &&
+    lat <= GEO_BOUNDS.MAX_LAT &&
+    lng >= GEO_BOUNDS.MIN_LNG &&
+    lng <= GEO_BOUNDS.MAX_LNG
+  );
+};
+
+/**
+ * Batch Update Locations (for offline sync)
+ * POST /api/location/batch-update
+ */
+exports.updateBatchLocation = asyncHandler(async (req, res) => {
+  const { locations } = req.body;
+
+  if (!Array.isArray(locations)) {
+    throw new ApiError(400, 'Locations must be an array', 'INVALID_FORMAT');
+  }
+
+  if (locations.length > LIMITS.MAX_BATCH_SIZE) {
+    throw new ApiError(400, `Batch size exceeds limit of ${LIMITS.MAX_BATCH_SIZE}`, 'BATCH_TOO_LARGE');
+  }
+
+  let processed = 0;
+  let failed = 0;
+
+  // Process in serial to avoid race conditions on same tourist status updates
+  // or use Promise.all if independent. Serial is safer for logic order.
+  for (const loc of locations) {
+    try {
+      const { device_id, x, y, lat, lng, rssi, sos_flag, timestamp } = loc;
+
+      // Validate bounds if lat/lng provided
+      if (lat && lng && !isValidCoordinate(lat, lng)) {
+        logger.warn(`[Batch] Out of bounds coordinates for ${device_id}: ${lat}, ${lng}`);
+        failed++;
+        continue;
+      }
+
+      const tourist = await prisma.tourist.findUnique({ where: { device_id } });
+      if (!tourist) {
+        failed++;
+        continue;
+      }
+
+      // Create log
+      await prisma.locationLog.create({
+        data: {
+          device_id,
+          tourist_id: tourist.id,
+          x, y, lat, lng, rssi,
+          is_sos: sos_flag || false,
+          timestamp: timestamp ? new Date(timestamp) : new Date()
+        }
+      });
+
+      // Update tourist latest status only if this log is newer than last_seen
+      const logTime = timestamp ? new Date(timestamp) : new Date();
+      if (!tourist.last_seen || logTime > tourist.last_seen) {
+        let updateData = {
+          last_location: { x, y, lat, lng },
+          last_seen: logTime
+        };
+
+        if (sos_flag) updateData.status = TOURIST_STATUS.SOS;
+        else if (tourist.status !== TOURIST_STATUS.SOS) updateData.status = TOURIST_STATUS.ACTIVE;
+
+        await prisma.tourist.update({
+          where: { id: tourist.id },
+          data: updateData
+        });
+      }
+
+      processed++;
+    } catch (e) {
+      logger.error(`[Batch] Error processing item for ${loc.device_id}: ${e.message}`);
+      failed++;
+    }
+  }
+
+  res.json(successResponse({ processed, failed }, 'Batch processing complete'));
 });

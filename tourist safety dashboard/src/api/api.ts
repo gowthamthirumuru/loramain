@@ -17,6 +17,8 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 const USE_MOCK = import.meta.env.VITE_USE_MOCK === 'true';
+// const API_BASE_URL = 'http://localhost:5000/api';
+// const USE_MOCK = false;
 
 // Create axios instance
 const apiClient: AxiosInstance = axios.create({

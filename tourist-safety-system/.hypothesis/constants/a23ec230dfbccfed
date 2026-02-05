@@ -1,0 +1,4 @@
+# file: a:\loramain\tourist-safety-system\src\nodes\master.py
+# hypothesis_version: 6.151.5
+
+[0.01, 100, 865, '\x1b[0m', '\x1b[1m', '\x1b[2m', '\x1b[91m', '\x1b[92m', '\x1b[93m', '\x1b[94m', '\x1b[95m', '\x1b[96m', '\x1b[97m', '../../', ':', 'ANCHOR_2', 'ANCHOR_3', 'FREQUENCY', 'MASTER', 'PING', 'REPORT', 'SOS', 'UNKNOWN', '__main__', 'buffered_items', 'clear', 'cls', 'device_id', 'nt', 'processed', 'r', 'received', 'rssi', 'sos_flag', 'startup', 'successful_sends', 'timestamp', 'total_positions', 'x', 'y', '█', '░']

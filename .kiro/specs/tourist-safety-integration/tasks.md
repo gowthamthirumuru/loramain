@@ -7,53 +7,53 @@ This implementation plan converts the Tourist Safety System integration design i
 ## Tasks
 
 - [ ] 1. Create LoRa Backend Integration Module
-  - [ ] 1.1 Implement BackendClient class in Python
+  - [x] 1.1 Implement BackendClient class in Python
     - Create `tourist-safety-system/src/utils/backend_client.py`
     - Implement HTTP client with retry logic and exponential backoff
     - Add coordinate conversion from local X,Y to GPS lat/lng
     - Include connection health checking and heartbeat functionality
     - _Requirements: 1.1, 1.2, 1.5, 7.4, 10.1_
 
-  - [ ] 1.2 Write property test for BackendClient retry logic
+  - [x] 1.2 Write property test for BackendClient retry logic
     - **Property 9: Network Resilience and Recovery**
     - **Validates: Requirements 1.5, 7.4, 10.1**
 
-  - [ ] 1.3 Update LoRa system configuration for backend integration
+  - [x] 1.3 Update LoRa system configuration for backend integration
     - Add backend URL, API key, and GPS reference point to `config/settings.py`
     - Configure request timeouts and retry parameters
     - Add environment variable support for production deployment
     - _Requirements: 4.2, 9.2_
 
 - [ ] 2. Enhance Master Node for Backend Communication
-  - [ ] 2.1 Modify master.py to integrate with BackendClient
+  - [x] 2.1 Modify master.py to integrate with BackendClient
     - Import and initialize BackendClient in master node
     - Update trilateration workflow to send data to backend
     - Add device ID extraction from tourist ping messages
     - Implement SOS flag detection and high-priority handling
     - _Requirements: 1.1, 2.1, 2.2_
 
-  - [ ] 2.2 Write property test for location data flow integrity
+  - [x] 2.2 Write property test for location data flow integrity
     - **Property 1: Location Data Flow Integrity**
     - **Validates: Requirements 1.1, 1.2, 1.4**
 
-  - [ ] 2.3 Add offline data caching to master node
+  - [x] 2.3 Add offline data caching to master node
     - Implement local data storage when backend is unreachable
     - Add data synchronization when connectivity is restored
     - Include cache size limits and data expiration
     - _Requirements: 10.1, 7.4_
 
-  - [ ] 2.4 Write property test for offline data caching
+  - [x] 2.4 Write property test for offline data caching
     - **Property 9: Network Resilience and Recovery**
     - **Validates: Requirements 1.5, 7.4, 10.1**
 
 - [ ] 3. Update Tourist Device Message Format
-  - [ ] 3.1 Modify tourist.py to include device ID in messages
+  - [x] 3.1 Modify tourist.py to include device ID in messages
     - Update message format to "PING:DEVICE_ID" and "SOS:DEVICE_ID"
     - Add unique device ID configuration per tourist device
     - Implement SOS button GPIO integration (hardware dependent)
     - _Requirements: 2.1, 3.1_
 
-  - [ ] 3.2 Write property test for SOS alert workflow
+  - [x] 3.2 Write property test for SOS alert workflow
     - **Property 3: SOS Alert End-to-End Workflow**
     - **Validates: Requirements 2.1, 2.2, 2.3, 2.4, 2.5**
 
@@ -61,58 +61,57 @@ This implementation plan converts the Tourist Safety System integration design i
   - Ensure all tests pass, verify LoRa master node can send data to backend, ask the user if questions arise.
 
 - [ ] 5. Enhance Backend Location Controller
-  - [ ] 5.1 Update location controller for improved device validation
+  - [x] 5.1 Update location controller for improved device validation
     - Enhance device ID validation in location update endpoint
     - Add comprehensive error handling for unregistered devices
     - Implement geographic bounds checking for coordinates
     - Add bulk location update processing for multiple devices
     - _Requirements: 3.2, 3.3, 4.4, 6.3_
 
-  - [ ] 5.2 Write property test for device registration validation
+  - [x] 5.2 Write property test for device registration validation
     - **Property 2: Device Registration Validation**
     - **Validates: Requirements 3.1, 3.2, 3.3**
 
-  - [ ] 5.3 Implement tourist offline detection
+  - [x] 5.3 Implement tourist offline detection
     - Add background job to detect tourists not seen for 5 minutes
     - Create missing tourist alerts and notifications
     - Update tourist status to "potentially_missing"
     - _Requirements: 6.5_
 
-  - [ ] 5.4 Write property test for tourist offline detection
+  - [x] 5.4 Write property test for tourist offline detection
     - **Property 7: Tourist Offline Detection**
     - **Validates: Requirements 6.5**
 
 - [ ] 6. Enhance Real-Time WebSocket Features
-  - [ ] 6.1 Improve Socket.IO event broadcasting
+  - [x] 6.1 Improve Socket.IO event broadcasting
     - Add room-based subscriptions for different user types
     - Implement connection authentication and authorization
     - Add heartbeat mechanism for connection health monitoring
     - Enhance error handling for failed broadcasts
     - _Requirements: 5.1, 5.2, 9.3_
 
-  - [ ] 6.2 Write property test for real-time dashboard updates
+  - [x] 6.2 Write property test for real-time dashboard updates
     - **Property 5: Real-Time Dashboard Updates**
     - **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5**
 
-  - [ ] 6.3 Add system health monitoring endpoints
+  - [x] 6.3 Add system health monitoring endpoints
     - Create endpoints for LoRa network, database, and service health
     - Implement health check aggregation and status reporting
     - Add administrator notification system for critical failures
     - _Requirements: 7.1, 7.2, 7.3_
 
-  - [ ] 6.4 Write property test for system health monitoring
+  - [x] 6.4 Write property test for system health monitoring
     - **Property 8: System Health Monitoring**
     - **Validates: Requirements 7.1, 7.2, 7.3**
 
 - [ ] 7. Update Dashboard for Real-Time Integration
-  - [ ] 7.1 Enhance WebSocket client in dashboard
-    - Improve Socket.IO client with automatic reconnection
-    - Add connection status indicators and user notifications
-    - Implement exponential backoff for reconnection attempts
+  - [x] 7.1 Enhance WebSocket client in dashboard
+    - Create connection management in store
     - Add event handling for location updates and SOS alerts
+    - **Verification**: Property tests for socket state updates
     - _Requirements: 5.1, 5.5, 10.4_
 
-  - [ ] 7.2 Write property test for WebSocket connection resilience
+  - [x] 7.2 Write property test for WebSocket connection resilience
     - **Property 13: WebSocket Connection Resilience**
     - **Validates: Requirements 10.4**
 

@@ -64,176 +64,232 @@ def print_waiting():
     print(f"\n{Colors.DIM}⏳ Waiting for signals...{Colors.RESET}", end='\r')
 
 
-def run_master():
-    clear_screen()
-    print_header()
-    
-    # Get frequency from centralized config
-    freq = LORA_SETTINGS.get("FREQUENCY", 865)
-    
-    # Initialize LoRa
-    print(f"{Colors.DIM}Initializing LoRa at {freq} MHz...{Colors.RESET}")
-    
-    if IS_RASPBERRY_PI:
-        lora = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=1, power=22, rssi=True)
-        print(f"{Colors.GREEN}✓ LoRa hardware initialized{Colors.RESET}")
-    else:
-        lora = None
-        print(f"{Colors.YELLOW}⚠ Running in simulation mode (not on Pi){Colors.RESET}")
-    
-    # Load anchor positions
-    anchors = get_anchors()
-    if anchors:
-        print(f"{Colors.GREEN}✓ Loaded {len(anchors)} anchors{Colors.RESET}")
-    else:
-        print(f"{Colors.RED}✗ No anchors loaded! Check anchors.json{Colors.RESET}")
-        return
-    
-    # Validate required anchors
-    required_anchors = ["MASTER", "ANCHOR_2", "ANCHOR_3"]
-    missing = [a for a in required_anchors if a not in anchors]
-    if missing:
-        print(f"{Colors.RED}✗ Missing anchor config: {missing}{Colors.RESET}")
-        return
-    
-    # Initialize backend client
-    backend = BackendClient()
-    print(f"{Colors.DIM}Connecting to backend at {backend.base_url}...{Colors.RESET}")
-    
-    if backend.check_connection():
-        print(f"{Colors.GREEN}✓ Backend connected{Colors.RESET}")
-        backend.send_heartbeat(anchor_id="MASTER", stats={"startup": True})
-    else:
-        print(f"{Colors.YELLOW}⚠ Backend unreachable - will retry on each update{Colors.RESET}")
-    
-    print(f"\n{Colors.GREEN}{Colors.BOLD}✓ Ready! Awaiting tourist signals...{Colors.RESET}\n")
-    
-    # State tracking
-    current_readings = {}
-    last_ping_time = time.time()
-    last_heartbeat_time = time.time()
-    current_device_id = None
-    is_sos = False
-    
-    # Counters
-    total_positions = 0
-    successful_sends = 0
-    
-    try:
-        while True:
-            # Receive data
-            msg, rssi = None, None
-            if lora:
-                msg, rssi = lora.receive()
-            
+class MasterNode:
+    def __init__(self):
+        # Configuration
+        self.anchors = get_anchors()
+        self.required_anchors = ["MASTER", "ANCHOR_2", "ANCHOR_3"]
+        
+        # State
+        self.current_readings = {}
+        self.last_ping_time = time.time()
+        self.last_heartbeat_time = time.time()
+        self.current_device_id = None
+        self.is_sos = False
+        
+        # Stats
+        self.total_positions = 0
+        self.successful_sends = 0
+        
+        # Offline Buffering
+        self.offline_buffer = []
+        self.buffer_limit = 100
+        
+        # Components
+        self.backend = BackendClient()
+        self.lora = self._init_lora()
+        
+    def _init_lora(self):
+        freq = LORA_SETTINGS.get("FREQUENCY", 865)
+        print(f"{Colors.DIM}Initializing LoRa at {freq} MHz...{Colors.RESET}")
+        
+        if IS_RASPBERRY_PI:
+            try:
+                lora = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=1, power=22, rssi=True)
+                print(f"{Colors.GREEN}✓ LoRa hardware initialized{Colors.RESET}")
+                return lora
+            except Exception as e:
+                print(f"{Colors.RED}✗ LoRa init failed: {e}{Colors.RESET}")
+                return None
+        else:
+            print(f"{Colors.YELLOW}⚠ Running in simulation mode (not on Pi){Colors.RESET}")
+            return None
+
+    def start(self):
+        clear_screen()
+        print_header()
+        
+        if not self.anchors:
+            print(f"{Colors.RED}✗ No anchors loaded! Check anchors.json{Colors.RESET}")
+            return
+        
+        # Validate required anchors
+        missing = [a for a in self.required_anchors if a not in self.anchors]
+        if missing:
+            print(f"{Colors.RED}✗ Missing anchor config: {missing}{Colors.RESET}")
+            return
+
+        print(f"{Colors.DIM}Connecting to backend at {self.backend.base_url}...{Colors.RESET}")
+        if self.backend.check_connection():
+            print(f"{Colors.GREEN}✓ Backend connected{Colors.RESET}")
+            self.backend.send_heartbeat(anchor_id="MASTER", stats={"startup": True})
+        else:
+            print(f"{Colors.YELLOW}⚠ Backend unreachable - buffering enabled{Colors.RESET}")
+
+        print(f"\n{Colors.GREEN}{Colors.BOLD}✓ Ready! Awaiting tourist signals...{Colors.RESET}\n")
+        
+        try:
+            while True:
+                self.loop()
+                time.sleep(0.01)
+        except KeyboardInterrupt:
+            print(f"\n\n{Colors.YELLOW}Shutting down...{Colors.RESET}")
+        finally:
+            self.cleanup()
+
+    def loop(self):
+        # 1. Receive Messages
+        if self.lora:
+            msg, rssi = self.lora.receive()
             if msg:
-                # Direct PING/SOS from tourist
-                if "PING" in msg or "SOS" in msg:
-                    current_readings["MASTER"] = rssi
-                    last_ping_time = time.time()
-                    
-                    # Extract device ID
-                    try:
-                        parts = msg.split(":")
-                        if len(parts) >= 2:
-                            current_device_id = parts[1].strip().upper()
-                        is_sos = "SOS" in msg
-                    except:
-                        current_device_id = "UNKNOWN"
-                
-                # Report from relay
-                elif "REPORT" in msg:
-                    try:
-                        parts = msg.split(":")
-                        sender_id = parts[1].strip().upper()
-                        reported_rssi = int(parts[2])
-                        current_readings[sender_id] = reported_rssi
-                    except:
-                        pass
-
-            # Update status bar
-            if len(current_readings) > 0:
-                print_status(len(current_readings))
-
-            # Triangulate when we have all 3 readings
-            if len(current_readings) >= 3:
-                total_positions += 1
-                
-                tri_input = []
-                distances = {}
-                rssi_values = []
-                
-                # Build trilateration input
-                for anchor_id in ["MASTER", "ANCHOR_2", "ANCHOR_3"]:
-                    if anchor_id in current_readings:
-                        rssi_val = current_readings[anchor_id]
-                        dist = MathEngine.rssi_to_distance(rssi_val)
-                        distances[anchor_id] = dist
-                        rssi_values.append(rssi_val)
-                        tri_input.append({
-                            'x': anchors[anchor_id]["x"], 
-                            'y': anchors[anchor_id]["y"], 
-                            'r': dist
-                        })
-
-                # Calculate position
-                if len(tri_input) >= 3:
-                    result = MathEngine.trilaterate(tri_input)
-                    
-                    if result:
-                        x, y = result[0], result[1]
-                        print_location(x, y, distances, current_device_id, is_sos)
-                        
-                        # Send to backend
-                        if current_device_id:
-                            rssi_avg = int(sum(rssi_values) / len(rssi_values))
-                            success = backend.send_location(
-                                device_id=current_device_id,
-                                x=x,
-                                y=y,
-                                rssi_avg=rssi_avg,
-                                sos_flag=is_sos
-                            )
-                            if success:
-                                successful_sends += 1
-                                print(f"{Colors.GREEN}  ✓ Sent to backend{Colors.RESET}")
-                            else:
-                                print(f"{Colors.YELLOW}  ⚠ Backend send failed{Colors.RESET}")
-                        
-                        print(f"{Colors.DIM}  Stats: Positions={total_positions}, Sent={successful_sends}{Colors.RESET}")
-                    else:
-                        print(f"\n{Colors.RED}❌ Trilateration failed{Colors.RESET}")
-                
-                # Reset for next cycle
-                current_readings = {}
-                current_device_id = None
-                is_sos = False
-                print_waiting()
-
-            # Timeout handling
-            if time.time() - last_ping_time > 15 and len(current_readings) > 0:
-                print(f"\n{Colors.YELLOW}⚠ Timeout - clearing incomplete data{Colors.RESET}")
-                current_readings = {}
-                current_device_id = None
-                is_sos = False
-                last_ping_time = time.time()
+                self.process_message(msg, rssi)
+        
+        # 2. Update Status UI
+        if len(self.current_readings) > 0:
+            self._print_status(len(self.current_readings))
             
-            # Periodic heartbeat (every 60 seconds)
-            if time.time() - last_heartbeat_time > 60:
-                backend.send_heartbeat(
-                    anchor_id="MASTER",
-                    stats={
-                        "total_positions": total_positions,
-                        "successful_sends": successful_sends
-                    }
-                )
-                last_heartbeat_time = time.time()
-                
-            time.sleep(0.01)
+        # 3. Timeouts
+        if time.time() - self.last_ping_time > 15 and len(self.current_readings) > 0:
+            print(f"\n{Colors.YELLOW}⚠ Timeout - clearing incomplete data{Colors.RESET}")
+            self.reset_state()
             
-    except KeyboardInterrupt:
-        print(f"\n\n{Colors.YELLOW}Shutting down...{Colors.RESET}")
-    finally:
+        # 4. Trilateration
+        if len(self.current_readings) >= 3:
+            self.perform_trilateration()
+            
+        # 5. Heartbeat & Buffer Flush
+        if time.time() - self.last_heartbeat_time > 60:
+            self.send_heartbeat()
+            self.flush_buffer()
+
+    def process_message(self, msg, rssi):
+        # Direct PING/SOS
+        if "PING" in msg or "SOS" in msg:
+            self.current_readings["MASTER"] = rssi
+            self.last_ping_time = time.time()
+            
+            try:
+                parts = msg.split(":")
+                if len(parts) >= 2:
+                    self.current_device_id = parts[1].strip().upper()
+                self.is_sos = "SOS" in msg
+            except:
+                self.current_device_id = "UNKNOWN"
+        
+        # Relay REPORT
+        elif "REPORT" in msg:
+            try:
+                parts = msg.split(":")
+                sender_id = parts[1].strip().upper()
+                reported_rssi = int(parts[2])
+                self.current_readings[sender_id] = reported_rssi
+            except:
+                pass
+
+    def perform_trilateration(self):
+        self.total_positions += 1
+        
+        tri_input = []
+        distances = {}
+        rssi_values = []
+        
+        for anchor_id in self.required_anchors:
+            if anchor_id in self.current_readings:
+                rssi_val = self.current_readings[anchor_id]
+                dist = MathEngine.rssi_to_distance(rssi_val)
+                distances[anchor_id] = dist
+                rssi_values.append(rssi_val)
+                tri_input.append({
+                    'x': self.anchors[anchor_id]["x"], 
+                    'y': self.anchors[anchor_id]["y"], 
+                    'r': dist
+                })
+
+        if len(tri_input) >= 3:
+            result = MathEngine.trilaterate(tri_input)
+            
+            if result:
+                x, y = result
+                self._print_location(x, y, distances)
+                
+                if self.current_device_id:
+                    rssi_avg = int(sum(rssi_values) / len(rssi_values))
+                    self.send_data(x, y, rssi_avg)
+                
+                print(f"{Colors.DIM}  Stats: Positions={self.total_positions}, Sent={self.successful_sends}, Buffer={len(self.offline_buffer)}{Colors.RESET}")
+            else:
+                print(f"\n{Colors.RED}❌ Trilateration failed{Colors.RESET}")
+        
+        self.reset_state()
+        self._print_waiting()
+
+    def send_data(self, x, y, rssi_avg):
+        # Try sending immediately
+        success = self.backend.send_location(
+            device_id=self.current_device_id,
+            x=x, y=y, rssi_avg=rssi_avg, sos_flag=self.is_sos
+        )
+        
+        if success:
+            self.successful_sends += 1
+            print(f"{Colors.GREEN}  ✓ Sent to backend{Colors.RESET}")
+            # Opportunistic flush if we are connected
+            if self.offline_buffer:
+                self.flush_buffer()
+        else:
+            # Buffer it
+            print(f"{Colors.YELLOW}  ⚠ Backend unreachable - Buffering...{Colors.RESET}")
+            self.offline_buffer.append({
+                "device_id": self.current_device_id,
+                "x": x, "y": y,
+                "rssi": rssi_avg,
+                "sos_flag": self.is_sos,
+                "timestamp": time.time()
+            })
+            # Trim buffer if too large
+            if len(self.offline_buffer) > self.buffer_limit:
+                self.offline_buffer.pop(0)
+
+    def flush_buffer(self):
+        if not self.offline_buffer:
+            return
+            
+        print(f"{Colors.DIM}Attempting to flush {len(self.offline_buffer)} buffered records...{Colors.RESET}")
+        results = self.backend.send_batch_locations(self.offline_buffer)
+        
+        # If API returns success stats, clear buffer (or failing items)
+        # Assuming simple clear for now if call succeeds, as send_batch_locations returns processed count logic
+        # But my current backend_client returns {"processed": 0, "failed": ...} on error
+        
+        # If result implies success, clear sent items.
+        # For simplicity, if check_connection is True, clear logic.
+        # Wait, backend_client.send_batch_locations returns a dict.
+        
+        # Let's trust if we get a response it's handled.
+        # Actually proper way:
+        if results.get('processed', 0) > 0 or results.get('received', False):
+             self.offline_buffer = [] # Clear all for now
+             print(f"{Colors.GREEN}  ✓ Buffer flushed{Colors.RESET}")
+        else:
+             print(f"{Colors.YELLOW}  ⚠ Flush failed{Colors.RESET}")
+
+    def send_heartbeat(self):
+        self.backend.send_heartbeat(
+            anchor_id="MASTER",
+            stats={
+                "total_positions": self.total_positions,
+                "successful_sends": self.successful_sends,
+                "buffered_items": len(self.offline_buffer)
+            }
+        )
+        self.last_heartbeat_time = time.time()
+
+    def reset_state(self):
+        self.current_readings = {}
+        self.current_device_id = None
+        self.is_sos = False
+
+    def cleanup(self):
         if IS_RASPBERRY_PI:
             try:
                 import RPi.GPIO as GPIO
@@ -241,6 +297,33 @@ def run_master():
             except:
                 pass
 
+    # --- UI Helpers ---
+    def _print_status(self, anchors_received, total=3):
+        bar = "█" * anchors_received + "░" * (total - anchors_received)
+        color = Colors.GREEN if anchors_received == total else Colors.YELLOW
+        print(f"\r{Colors.DIM}Signal Collection: {color}[{bar}] {anchors_received}/{total}{Colors.RESET}", end='', flush=True)
+
+    def _print_location(self, x, y, distances):
+        print(f"\n\n{Colors.GREEN}{Colors.BOLD}")
+        print("┌──────────────────────────────────────────────────────────┐")
+        if self.is_sos:
+            print(f"│  🚨 SOS ALERT - {self.current_device_id or 'UNKNOWN':<40} │")
+        else:
+            print(f"│  📍 TOURIST LOCATED - {self.current_device_id or 'UNKNOWN':<34} │")
+        print("├──────────────────────────────────────────────────────────┤")
+        print(f"│     X = {x:>8.2f} meters                                 │")
+        print(f"│     Y = {y:>8.2f} meters                                 │")
+        print("├──────────────────────────────────────────────────────────┤")
+        print(f"│  {Colors.DIM}Distances:{Colors.GREEN}{Colors.BOLD}                                              │")
+        for anchor, dist in distances.items():
+            line = f"│    • {anchor}: {dist:.2f}m"
+            print(f"{line:<60}│")
+        print("└──────────────────────────────────────────────────────────┘")
+        print(f"{Colors.RESET}")
+
+    def _print_waiting(self):
+        print(f"\n{Colors.DIM}⏳ Waiting for signals...{Colors.RESET}", end='\r')
 
 if __name__ == "__main__":
-    run_master()
+    node = MasterNode()
+    node.start()

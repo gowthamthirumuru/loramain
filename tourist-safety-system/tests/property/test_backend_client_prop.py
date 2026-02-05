@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from hypothesis import given, strategies as st, settings
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../../')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from src.utils.backend_client import BackendClient
 
 class TestBackendClientProperty(unittest.TestCase):

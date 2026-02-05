@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class BackendClient:
     """HTTP client for communicating with the Tourist Safety Backend"""
     
-    def __init__(self):
+    def __init__(self, session=None):
         self.base_url = BACKEND_URL
         self.headers = {
             'Content-Type': 'application/json',
@@ -23,18 +23,17 @@ class BackendClient:
         self.timeout = 5  # seconds
         self.retry_count = 3
         self.connected = False
+        
+        self.session = session or requests.Session()
+        # If headers were set on session, update them
+        self.session.headers.update(self.headers)
     
     def check_connection(self):
         """Test if backend is reachable"""
         try:
             # Using health endpoint if available, or just root
             # Assuming backend has /api/health or similar. 
-            # If strictly following spec, maybe we should assume a known good endpoint.
-            # Let's stick to /health or /api/health. 
-            # But the existing code used /health. I'll change to /api/health which is more standard or what I recall from controllers.
-            # Actually, let's keep it safe and just check /api/metrics or something that exists.
-            # Or assume /health exists. 
-            response = requests.get(
+            response = self.session.get(
                 f"{self.base_url}/health",
                 timeout=3
             )
@@ -65,7 +64,7 @@ class BackendClient:
         
         for attempt in range(self.retry_count):
             try:
-                response = requests.post(
+                response = self.session.post(
                     f"{self.base_url}/api/location/update",
                     json=payload,
                     headers=self.headers,
@@ -107,7 +106,7 @@ class BackendClient:
         }
         
         try:
-            response = requests.post(
+            response = self.session.post(
                 f"{self.base_url}/api/gateway/heartbeat",
                 json=payload,
                 headers=self.headers,
@@ -141,7 +140,7 @@ class BackendClient:
             })
         
         try:
-            response = requests.post(
+            response = self.session.post(
                 f"{self.base_url}/api/gateway/batch-update",
                 json={"locations": converted},
                 headers=self.headers,
@@ -171,7 +170,7 @@ class BackendClient:
             payload["gps_position"] = {"lat": gps_lat, "lng": gps_lng}
         
         try:
-            response = requests.post(
+            response = self.session.post(
                 f"{self.base_url}/api/gateway/anchors",
                 json=payload,
                 headers=self.headers,

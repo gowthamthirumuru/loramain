@@ -105,14 +105,11 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
 }));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    success: true,
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
+const healthRoutes = require('./routes/healthRoutes');
+app.use('/health', healthRoutes); // Mount at root /health for convenience? Or /api/health?
+// The plan said /health and /health/detailed.
+// The old one was app.get('/health'...)
+// Let's replace the old app.get('/health') with this router.
 
 // Root endpoint
 app.get('/', (req, res) => {

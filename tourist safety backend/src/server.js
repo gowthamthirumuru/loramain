@@ -9,6 +9,7 @@ const http = require('http');
 const app = require('./app');
 const connectDB = require('./config/db');
 const socketService = require('./utils/socketService');
+const { initCronJobs } = require('./services/cronService');
 const logger = require('./utils/logger');
 
 // =============== STARTUP ===============
@@ -23,6 +24,9 @@ const startServer = async () => {
 
     // 3. Initialize Socket.IO
     const io = socketService.init(server);
+
+    // 4. Initialize Cron Jobs
+    initCronJobs();
 
     io.on('connection', (socket) => {
       logger.info(`Client connected: ${socket.id}`);

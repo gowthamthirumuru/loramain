@@ -16,6 +16,13 @@ router.post('/update',
     locationController.updateLocation
 );
 
+// POST /api/location/batch-update - Batch update locations (offline sync)
+router.post('/batch-update',
+    authenticateGateway,
+    gatewayLimiter,
+    locationController.updateBatchLocation
+);
+
 // GET /api/location/active - Get all active tourist locations
 router.get('/active', locationController.getAllActive);
 
