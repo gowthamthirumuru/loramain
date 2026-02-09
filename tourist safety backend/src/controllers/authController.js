@@ -4,8 +4,8 @@ const { validationResult, body } = require('express-validator');
 const { prisma } = require('../config/db'); // Use Prisma
 const { asyncHandler, ApiError } = require('../middleware/errorHandler');
 const { successResponse } = require('../utils/helpers');
+const { logAction } = require('./actionLogController');
 const logger = require('../utils/logger');
-
 // ============================================
 // Validation Rules
 // ============================================
@@ -140,6 +140,7 @@ exports.register = asyncHandler(async (req, res) => {
     });
 
     logger.info(`New user registered: ${email}`);
+    await logAction(user.id, 'REGISTER_USER', `User registered: ${email}`, req);
 
     res.status(201).json(successResponse({
         user: {

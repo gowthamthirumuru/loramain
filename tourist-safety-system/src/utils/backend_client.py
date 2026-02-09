@@ -20,14 +20,40 @@ class BackendClient:
             'Content-Type': 'application/json',
             'X-API-Key': GATEWAY_API_KEY
         }
-        self.timeout = 5  # seconds
-        self.retry_count = 3
+        self.timeout = 10  # increased from 5
+        self.retry_count = 5 # increased from 3
         self.connected = False
+        self.config_cache = {}  # Cache for system settings
         
         self.session = session or requests.Session()
         # If headers were set on session, update them
         self.session.headers.update(self.headers)
     
+    def fetch_config(self):
+        """
+        Fetch system settings from backend and update local cache.
+        """
+        try:
+            response = self.session.get(
+                f"{self.base_url}/api/system/settings",
+                headers=self.headers,
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                data = response.json().get('data', {})
+                # Store specific keys we care about
+                if 'gps_reference' in data:
+                    self.config_cache['gps_reference'] = data['gps_reference']
+                    logger.info(f"[Backend] Updated GPS Reference: {self.config_cache['gps_reference']}")
+                return True
+            else:
+                logger.warning(f"[Backend] Failed to fetch config: {response.status_code}")
+                return False
+        except Exception as e:
+            logger.warning(f"[Backend] Config fetch error: {e}")
+            return False
+
     def check_connection(self):
         """Test if backend is reachable"""
         try:
@@ -48,8 +74,11 @@ class BackendClient:
         """
         Send trilaterated location to backend.
         """
-        # Convert to GPS using MathEngine
-        lat, lng = MathEngine.convert_to_gps(x, y)
+        # Convert to GPS using MathEngine and specific reference if available
+        lat, lng = MathEngine.convert_to_gps(
+            x, y, 
+            reference_point=self.config_cache.get('gps_reference')
+        )
 
         # Send raw X,Y coordinates (meters) and GPS
         payload = {
@@ -129,7 +158,10 @@ class BackendClient:
         # Convert all locations to GPS
         converted = []
         for loc in locations:
-            lat, lng = MathEngine.convert_to_gps(loc['x'], loc['y'])
+            lat, lng = MathEngine.convert_to_gps(
+                loc['x'], loc['y'],
+                reference_point=self.config_cache.get('gps_reference')
+            )
             converted.append({
                 "device_id": loc['device_id'],
                 "lat": lat,

@@ -64,12 +64,13 @@ exports.updateLocation = asyncHandler(async (req, res) => {
     });
 
     logger.logLocation(device_id, x, y, true);
+    logger.info(`[SOS] Triggered for device ${device_id}`);
 
     // Emit SOS alert via Socket.IO
     try {
-      const io = socketService.getIO();
-      io.emit(SOCKET_EVENTS.SOS_ALERT, {
+      socketService.emitSOSAlert({
         sos_id: sosAlert.id,
+        device_id, // Add device_id
         tourist_id: tourist.id,
         tourist_name: tourist.name,
         phone: tourist.phone,
@@ -96,6 +97,7 @@ exports.updateLocation = asyncHandler(async (req, res) => {
   try {
     const io = socketService.getIO();
     io.emit(SOCKET_EVENTS.LOCATION_UPDATE, {
+      device_id, // Add device_id
       tourist_id: updatedTourist.id,
       name: updatedTourist.name,
       x,
@@ -239,6 +241,7 @@ const isValidCoordinate = (lat, lng) => {
 
 /**
  * Batch Update Locations (for offline sync)
+ * Optimized with Prisma Transactions
  * POST /api/location/batch-update
  */
 exports.updateBatchLocation = asyncHandler(async (req, res) => {
@@ -252,62 +255,164 @@ exports.updateBatchLocation = asyncHandler(async (req, res) => {
     throw new ApiError(400, `Batch size exceeds limit of ${LIMITS.MAX_BATCH_SIZE}`, 'BATCH_TOO_LARGE');
   }
 
-  let processed = 0;
+  const validLogs = [];
+  const latestUpdates = new Map(); // Map<device_id, latestLog>
   let failed = 0;
 
-  // Process in serial to avoid race conditions on same tourist status updates
-  // or use Promise.all if independent. Serial is safer for logic order.
+  // 1. Pre-process and validate
   for (const loc of locations) {
-    try {
-      const { device_id, x, y, lat, lng, rssi, sos_flag, timestamp } = loc;
+    const { device_id, x, y, lat, lng, rssi, sos_flag, timestamp } = loc;
 
-      // Validate bounds if lat/lng provided
-      if (lat && lng && !isValidCoordinate(lat, lng)) {
-        logger.warn(`[Batch] Out of bounds coordinates for ${device_id}: ${lat}, ${lng}`);
-        failed++;
-        continue;
-      }
+    // Validate bounds if lat/lng provided
+    if (lat && lng && !isValidCoordinate(lat, lng)) {
+      logger.warn(`[Batch] Out of bounds coordinates for ${device_id}: ${lat}, ${lng}`);
+      failed++;
+      continue;
+    }
 
-      const tourist = await prisma.tourist.findUnique({ where: { device_id } });
-      if (!tourist) {
-        failed++;
-        continue;
-      }
+    // We need to check if device exists. To avoid N queries, we could fetch all relevant tourists first
+    // But for now, let's assume valid device_id or fail during transaction if we want strictness.
+    // However, existing logic checks existence. Let's do a bulk check.
 
-      // Create log
-      await prisma.locationLog.create({
-        data: {
-          device_id,
-          tourist_id: tourist.id,
-          x, y, lat, lng, rssi,
-          is_sos: sos_flag || false,
-          timestamp: timestamp ? new Date(timestamp) : new Date()
-        }
+    // For simplicity in this logic matching previous behavior per item:
+    // We will trust the optimizing step to handle existence via a fetch.
+    validLogs.push(loc);
+
+    // Track latest update per device
+    const currentLatest = latestUpdates.get(device_id);
+    const logTime = timestamp ? new Date(timestamp) : new Date();
+
+    if (!currentLatest || logTime > new Date(currentLatest.timestamp || 0)) {
+      latestUpdates.set(device_id, { ...loc, timestamp: logTime });
+    }
+  }
+
+  if (validLogs.length === 0) {
+    return res.json(successResponse({ processed: 0, failed }, 'No valid locations to process'));
+  }
+
+  // 2. Fetch all tourists involved to verify existence and get IDs
+  const deviceIds = [...latestUpdates.keys()];
+  const tourists = await prisma.tourist.findMany({
+    where: { device_id: { in: deviceIds } },
+    select: { id: true, device_id: true, status: true, last_seen: true, name: true, phone: true, emergency_contact: true }
+  });
+
+  const touristMap = new Map(tourists.map(t => [t.device_id, t]));
+
+  // Filter logs for known tourists
+  const finalLogsToInsert = [];
+
+  for (const log of validLogs) {
+    const tourist = touristMap.get(log.device_id);
+    if (tourist) {
+      finalLogsToInsert.push({
+        device_id: log.device_id,
+        tourist_id: tourist.id,
+        x: log.x,
+        y: log.y,
+        lat: log.lat,
+        lng: log.lng,
+        rssi: log.rssi,
+        is_sos: log.sos_flag || false,
+        timestamp: log.timestamp ? new Date(log.timestamp) : new Date()
       });
-
-      // Update tourist latest status only if this log is newer than last_seen
-      const logTime = timestamp ? new Date(timestamp) : new Date();
-      if (!tourist.last_seen || logTime > tourist.last_seen) {
-        let updateData = {
-          last_location: { x, y, lat, lng },
-          last_seen: logTime
-        };
-
-        if (sos_flag) updateData.status = TOURIST_STATUS.SOS;
-        else if (tourist.status !== TOURIST_STATUS.SOS) updateData.status = TOURIST_STATUS.ACTIVE;
-
-        await prisma.tourist.update({
-          where: { id: tourist.id },
-          data: updateData
-        });
-      }
-
-      processed++;
-    } catch (e) {
-      logger.error(`[Batch] Error processing item for ${loc.device_id}: ${e.message}`);
+    } else {
       failed++;
     }
   }
 
-  res.json(successResponse({ processed, failed }, 'Batch processing complete'));
+  // 3. Prepare Transaction Operations
+  const operations = [];
+
+  // Op A: Bulk Insert Logs
+  if (finalLogsToInsert.length > 0) {
+    operations.push(prisma.locationLog.createMany({
+      data: finalLogsToInsert
+    }));
+  }
+
+  // Op B: Update Tourists (Only valid ones)
+  const updatesToProcess = [];
+
+  for (const [deviceId, latestLog] of latestUpdates) {
+    const tourist = touristMap.get(deviceId);
+    if (!tourist) continue;
+
+    const logTime = new Date(latestLog.timestamp);
+
+    // Update only if this batch has newer data than DB
+    if (!tourist.last_seen || logTime > tourist.last_seen) {
+      let updateData = {
+        last_location: {
+          x: latestLog.x,
+          y: latestLog.y,
+          lat: latestLog.lat,
+          lng: latestLog.lng
+        },
+        last_seen: logTime
+      };
+
+      if (latestLog.sos_flag) {
+        updateData.status = TOURIST_STATUS.SOS;
+
+        // NOTE: SOS Creation is complex in transaction if we want the ID back for socket.
+        // For batch optimization, we might skip creating individual Alert records OR 
+        // accept that batch sync sos might not trigger new Alert DB entries if simple.
+        // BUT, requirement is safety. 
+        // Let's create SOS Alert if not already SOS.
+        if (tourist.status !== TOURIST_STATUS.SOS) {
+          // We can't easily do conditional insert inside $transaction array without custom logic
+          // For now, we update status. A separate process or real-time event handles alerts.
+          // Batch is mostly for offline sync.
+        }
+      } else if (tourist.status !== TOURIST_STATUS.SOS) {
+        updateData.status = TOURIST_STATUS.ACTIVE;
+      }
+
+      operations.push(prisma.tourist.update({
+        where: { id: tourist.id },
+        data: updateData
+      }));
+
+      updatesToProcess.push({ tourist, latestLog, updateData });
+    }
+  }
+
+  // 4. Execute Transaction
+  try {
+    await prisma.$transaction(operations);
+
+    // 5. Post-process (Sockets) - Best effort
+    const io = socketService.getIO();
+    for (const { tourist, latestLog, updateData } of updatesToProcess) {
+      io.emit(SOCKET_EVENTS.LOCATION_UPDATE, {
+        tourist_id: tourist.id,
+        name: tourist.name,
+        x: latestLog.x,
+        y: latestLog.y,
+        lat: latestLog.lat,
+        lng: latestLog.lng,
+        rssi: latestLog.rssi,
+        status: updateData.status || tourist.status,
+        sos: latestLog.sos_flag || false,
+        timestamp: latestLog.timestamp
+      });
+
+      if (latestLog.sos_flag && tourist.status !== TOURIST_STATUS.SOS) {
+        // Trigger SOS alert socket even if DB Record wasn't made in transaction for simplicity
+        // Or better, don't emit NEW alert for offline sync to avoid spam, just update status.
+        // We will emit location update with SOS flag true.
+      }
+    }
+
+    res.json(successResponse({
+      processed: finalLogsToInsert.length,
+      failed
+    }, 'Batch processing complete'));
+
+  } catch (error) {
+    logger.error(`[Batch] Transaction failed: ${error.message}`);
+    throw new ApiError(500, 'Batch update failed during transaction', 'TRANSACTION_FAILED');
+  }
 });

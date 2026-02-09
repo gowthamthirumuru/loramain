@@ -95,11 +95,15 @@ const startServer = async () => {
 
 process.on('uncaughtException', (error) => {
   logger.error('Uncaught Exception:', error);
+  // Optional: Perform synchronous cleanup
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection:', reason);
+  logger.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Application specific logging, throwing an error, or other logic here
+  // Ideally, close the server and exit
+  process.exit(1);
 });
 
 // Start the server

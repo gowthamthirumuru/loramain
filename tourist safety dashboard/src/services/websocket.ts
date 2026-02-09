@@ -41,7 +41,7 @@ const notifyStatusChange = (status: ConnectionStatus) => {
     useDashboardStore.setState(state => ({
         systemStatus: {
             ...state.systemStatus,
-            websocket: status === 'connected' ? 'connected' : 'disconnected'
+            websocket: status === 'connected' ? 'online' : status === 'connecting' ? 'connecting' : 'offline'
         }
     }));
 };

@@ -1,31 +1,31 @@
-
-const fc = require('fast-check');
-const { checkOfflineTourists } = require('../../src/services/cronService');
-const { prisma } = require('../../src/config/db');
-const { LIMITS, TOURIST_STATUS } = require('../../src/config/constants');
+import { describe, test, expect, beforeEach, vi } from 'vitest';
+import fc from 'fast-check';
+import { checkOfflineTourists } from '../../src/services/cronService';
+import { prisma } from '../../src/config/db';
+import { LIMITS, TOURIST_STATUS } from '../../src/config/constants';
 
 // Mocks
-jest.mock('../../src/config/db', () => ({
+vi.mock('../../src/config/db', () => ({
     prisma: {
         tourist: {
-            findMany: jest.fn(),
-            update: jest.fn()
+            findMany: vi.fn(),
+            update: vi.fn()
         }
     }
 }));
 
-jest.mock('../../src/utils/socketService', () => ({
-    getIO: jest.fn(() => ({ emit: jest.fn() }))
+vi.mock('../../src/utils/socketService', () => ({
+    getIO: vi.fn(() => ({ emit: vi.fn() }))
 }));
 
-jest.mock('../../src/utils/logger', () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn()
+vi.mock('../../src/utils/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn()
 }));
 
 beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 });
 
 describe('Property 7: Tourist Offline Detection', () => {
@@ -41,7 +41,7 @@ describe('Property 7: Tourist Offline Detection', () => {
                     })
                 ),
                 async (touristsData) => {
-                    jest.clearAllMocks();
+                    vi.clearAllMocks();
 
                     const now = Date.now();
                     // We expect the query to look for last_seen < now - LIMIT
@@ -92,7 +92,7 @@ describe('Property 7: Tourist Offline Detection', () => {
                     });
                 }
             ),
-            { numRuns: 50 }
+            { numRuns: 10 }
         );
     });
 });

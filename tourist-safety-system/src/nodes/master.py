@@ -123,6 +123,12 @@ class MasterNode:
         if self.backend.check_connection():
             print(f"{Colors.GREEN}✓ Backend connected{Colors.RESET}")
             self.backend.send_heartbeat(anchor_id="MASTER", stats={"startup": True})
+            
+            # Fetch remote configuration (GPS Reference)
+            if self.backend.fetch_config():
+                print(f"{Colors.GREEN}✓ Remote configuration loaded{Colors.RESET}")
+            else:
+                print(f"{Colors.YELLOW}⚠ Using local default configuration{Colors.RESET}")
         else:
             print(f"{Colors.YELLOW}⚠ Backend unreachable - buffering enabled{Colors.RESET}")
 
@@ -130,7 +136,12 @@ class MasterNode:
         
         try:
             while True:
-                self.loop()
+                try:
+                    self.loop()
+                except Exception as e:
+                    print(f"\n{Colors.RED}⚠ Critical Loop Error: {e}{Colors.RESET}")
+                    # Optional: Log to file
+                    time.sleep(1) # Prevent rapid-fire looping on error
                 time.sleep(0.01)
         except KeyboardInterrupt:
             print(f"\n\n{Colors.YELLOW}Shutting down...{Colors.RESET}")

@@ -18,10 +18,14 @@ export function Sidebar({ activeView, setActiveView }: SidebarProps) {
   const { user } = useAuth();
 
   // Calculate dynamic counts
-  const activeAlertCount = alerts.filter(a => a.status === 'active' || a.status === 'responding').length;
-  const unreadMessageCount = conversations.reduce((acc, c) => acc + c.unread, 0);
-  const availableTeamCount = teams.filter(t => t.status === 'available').length;
-  const totalTeamCount = teams.length;
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+  const safeConversations = Array.isArray(conversations) ? conversations : [];
+  const safeTeams = Array.isArray(teams) ? teams : [];
+
+  const activeAlertCount = safeAlerts.filter(a => a.status === 'active' || a.status === 'responding').length;
+  const unreadMessageCount = safeConversations.reduce((acc, c) => acc + c.unread, 0);
+  const availableTeamCount = safeTeams.filter(t => t.status === 'available').length;
+  const totalTeamCount = safeTeams.length;
 
   const navigationItems = [
     { id: 'overview', label: 'Overview', icon: Home },

@@ -34,32 +34,41 @@ const errorHandler = (err, req, res, next) => {
     }
 
     // Handle specific error types
-    if (err.name === 'ValidationError') {
-        // Mongoose validation error
-        statusCode = 400;
-        code = 'VALIDATION_ERROR';
-        message = Object.values(err.errors).map(e => e.message).join(', ');
-    }
+    // Handle specific error types
 
-    if (err.name === 'CastError') {
-        // Invalid MongoDB ObjectId
-        statusCode = 400;
-        code = 'INVALID_ID';
-        message = 'Invalid ID format';
-    }
-
-    if (err.code === 11000) {
-        // MongoDB duplicate key error
-        statusCode = 409;
-        code = 'DUPLICATE_ENTRY';
-        const field = Object.keys(err.keyValue)[0];
-        message = `${field} already exists`;
+    // Prisma Error Handling
+    if (err.code) {
+        // P2002: Unique constraint failed
+        if (err.code === 'P2002') {
+            statusCode = 409;
+            code = 'DUPLICATE_ENTRY';
+            const target = err.meta?.target || 'Field';
+            message = `${target} must be unique`;
+        }
+        // P2025: Record not found
+        else if (err.code === 'P2025') {
+            statusCode = 404;
+            code = 'NOT_FOUND'; // Or RESOURCE_NOT_FOUND
+            message = 'Requested resource not found';
+        }
+        // P2003: Foreign key constraint failed
+        else if (err.code === 'P2003') {
+            statusCode = 400;
+            code = 'CONSTRAINT_VIOLATION';
+            message = 'Invalid reference to related record';
+        }
     }
 
     if (err.name === 'JsonWebTokenError') {
         statusCode = 401;
         code = 'INVALID_TOKEN';
         message = 'Invalid authentication token';
+    }
+
+    if (err.name === 'TokenExpiredError') {
+        statusCode = 401;
+        code = 'TOKEN_EXPIRED';
+        message = 'Authentication token expired';
     }
 
     // Send error response

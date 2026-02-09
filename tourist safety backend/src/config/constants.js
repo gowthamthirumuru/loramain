@@ -30,7 +30,8 @@ const LIMITS = {
     OFFLINE_THRESHOLD_MS: 5 * 60 * 1000, // 5 minutes without update = offline
     MAX_BATCH_SIZE: 50, // Maximum locations in batch update
     LOCATION_HISTORY_LIMIT: 1000, // Max location records to return
-    SOS_COOLDOWN_MS: 30 * 1000 // 30 seconds between SOS triggers per device
+    SOS_COOLDOWN_MS: 30 * 1000, // 30 seconds between SOS triggers per device
+    RETENTION_DAYS: 30 // Days to keep location logs
 };
 
 // Coordinate bounds (example for India region - adjust as needed)

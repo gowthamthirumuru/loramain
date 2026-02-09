@@ -1,51 +1,62 @@
-
-const fc = require('fast-check');
-
-// Mock dependencies BEFORE requiring the service
-jest.mock('../../src/config/db', () => ({
-    prisma: {
-        user: {
-            findUnique: jest.fn()
-        }
-    }
-}));
-
-const mockTo = jest.fn().mockReturnThis();
-const mockEmit = jest.fn();
-const mockIoInstance = {
-    on: jest.fn(),
-    use: jest.fn(),
-    to: mockTo,
-    emit: mockEmit
-};
-
-// Mock socket.io factory function
-jest.mock('socket.io', () => {
-    return jest.fn(() => mockIoInstance);
-});
-
-// Now require the service
-const socketService = require('../../src/utils/socketService');
+import { describe, test, expect, beforeAll, beforeEach, vi } from 'vitest';
+import fc from 'fast-check';
 
 describe('Property 5: Real-Time Dashboard Updates', () => {
+    let socketService;
+    let mockTo;
+    let mockEmit;
+    let mockIoInstance;
 
-    beforeAll(() => {
-        // Initialize service once with dummy server
-        // This triggers require('socket.io') which returns our mockIoInstance
+    beforeAll(async () => {
+        // Setup Mocks
+        vi.resetModules();
+
+        // Database Mock
+        vi.doMock('../../src/config/db', () => ({
+            prisma: {
+                user: { findUnique: vi.fn() }
+            }
+        }));
+
+        // Socket.io Mock
+        mockTo = vi.fn().mockReturnThis();
+        mockEmit = vi.fn();
+        mockIoInstance = {
+            on: vi.fn(),
+            use: vi.fn(),
+            to: mockTo,
+            emit: mockEmit
+        };
+
+        vi.doMock('socket.io', () => {
+            const mockServer = vi.fn(() => mockIoInstance);
+            mockServer.Server = mockServer;
+            return mockServer;
+        });
+
+        // Dynamic Import of Service
+        // This ensures the mock is used when require('socket.io') is called inside
+        socketService = await import('../../src/utils/socketService');
+
+        // Initialize
         socketService.init({});
     });
 
     beforeEach(() => {
-        jest.clearAllMocks();
-        mockTo.mockReturnThis(); // Ensure chaining works after clear
+        vi.clearAllMocks();
+        mockTo.mockReturnThis();
+    });
+
+    test('DEBUG: Direct call', () => {
+        socketService.emitToUser('123', 'test', {});
     });
 
     test('emitToUser targets correct room and sends data', async () => {
         await fc.assert(
             fc.property(
-                fc.string({ minLength: 1 }), // userId
-                fc.string({ minLength: 1 }), // event
-                fc.object(), // data
+                fc.string({ minLength: 1 }),
+                fc.string({ minLength: 1 }),
+                fc.object(),
                 (userId, event, data) => {
                     mockTo.mockClear();
                     mockEmit.mockClear();

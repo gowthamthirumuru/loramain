@@ -1,32 +1,32 @@
-
-const fc = require('fast-check');
-const { updateBatchLocation } = require('../../src/controllers/locationController');
-const { LIMITS, GEO_BOUNDS } = require('../../src/config/constants');
-const { prisma } = require('../../src/config/db');
+import { describe, test, expect, beforeEach, vi } from 'vitest';
+import fc from 'fast-check';
+import { updateBatchLocation } from '../../src/controllers/locationController';
+import { LIMITS, GEO_BOUNDS } from '../../src/config/constants';
+import { prisma } from '../../src/config/db';
 
 // Mocks
-jest.mock('../../src/config/db', () => ({
+vi.mock('../../src/config/db', () => ({
     prisma: {
         tourist: {
-            findUnique: jest.fn(),
-            update: jest.fn()
+            findUnique: vi.fn(),
+            update: vi.fn()
         },
         locationLog: {
-            create: jest.fn()
+            create: vi.fn()
         }
     }
 }));
 
-jest.mock('../../src/utils/logger', () => ({
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-    logLocation: jest.fn()
+vi.mock('../../src/utils/logger', () => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    logLocation: vi.fn()
 }));
 
 // Helper to reset mocks
 beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
 });
 
 describe('Property 2: Device & Data Validation', () => {
@@ -49,11 +49,11 @@ describe('Property 2: Device & Data Validation', () => {
                 fc.boolean(), // should_exist (if true, mock finding tourist)
                 async (locations, shouldExist) => {
                     // Reset mocks for each run in the property test
-                    jest.clearAllMocks();
+                    vi.clearAllMocks();
 
                     // Mock Request/Response
                     const req = { body: { locations } };
-                    const res = { json: jest.fn() };
+                    const res = { json: vi.fn() };
 
                     if (locations.length > LIMITS.MAX_BATCH_SIZE) {
                         await expect(updateBatchLocation(req, res))

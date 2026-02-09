@@ -25,7 +25,7 @@ export interface Tourist {
   location?: GeoLocation;
   emergencyContact?: string;
   registrationDate: string;
-  lastSeen?: string;
+  last_seen?: string | Date; // Unified with backend
   status?: string;
   device_id?: string;
 }
@@ -33,6 +33,8 @@ export interface Tourist {
 export interface GeoLocation {
   lat: number;
   lng: number;
+  x?: number; // Local coordinates
+  y?: number; // Local coordinates
   address?: string;
   landmark?: string;
 }

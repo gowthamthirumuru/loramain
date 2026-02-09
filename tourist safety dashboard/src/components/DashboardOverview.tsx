@@ -30,12 +30,24 @@ export function DashboardOverview() {
   // Use Zustand store
   const metrics = useMetrics();
   const emergencies = useEmergencies();
+  const safeEmergencies = Array.isArray(emergencies) ? emergencies : [];
   const storeAlerts = useAlerts();
   const teams = useTeams();
   const { updateEmergencyStatus, deployTeam, setActiveView, refreshData } = useDashboardStore();
 
+  // Default metrics to prevent crash - use property-level defaults
+  const safeMetrics = {
+    activeEmergencies: metrics?.activeEmergencies ?? 0,
+    avgResponseTime: metrics?.avgResponseTime ?? 0,
+    availableTeams: metrics?.availableTeams ?? 0,
+    totalTeams: metrics?.totalTeams ?? 0,
+    touristsTracked: metrics?.touristsTracked ?? 0,
+    touristsChange: metrics?.touristsChange ?? 0
+  };
+
   // Filter available teams with useMemo for stable reference
-  const availableTeams = useMemo(() => teams.filter(t => t.status === 'available'), [teams]);
+  const safeTeams = Array.isArray(teams) ? teams : [];
+  const availableTeams = useMemo(() => safeTeams.filter(t => t.status === 'available'), [safeTeams]);
 
   useEffect(() => {
     // Initial fetch
@@ -61,7 +73,7 @@ export function DashboardOverview() {
     {
       id: 'emergencies',
       label: 'Active Emergencies',
-      value: String(metrics.activeEmergencies),
+      value: String(safeMetrics.activeEmergencies),
       change: '+1 in last hour',
       trend: 'up',
       icon: AlertTriangle,
@@ -74,7 +86,7 @@ export function DashboardOverview() {
     {
       id: 'response',
       label: 'Avg Response Time',
-      value: `${metrics.avgResponseTime} min`,
+      value: `${safeMetrics.avgResponseTime} min`,
       change: 'Target: <8 min',
       trend: 'stable',
       icon: Clock,
@@ -87,8 +99,8 @@ export function DashboardOverview() {
     {
       id: 'teams',
       label: 'Available Teams',
-      value: `${metrics.availableTeams} / ${metrics.totalTeams}`,
-      change: `${metrics.totalTeams - metrics.availableTeams} responding`,
+      value: `${safeMetrics.availableTeams} / ${safeMetrics.totalTeams}`,
+      change: `${safeMetrics.totalTeams - safeMetrics.availableTeams} responding`,
       trend: 'stable',
       icon: Shield,
       severity: 'info',
@@ -100,8 +112,8 @@ export function DashboardOverview() {
     {
       id: 'tourists',
       label: 'Tourists Tracked',
-      value: metrics.touristsTracked.toLocaleString(),
-      change: `+${metrics.touristsChange} today`,
+      value: safeMetrics.touristsTracked.toLocaleString(),
+      change: `+${safeMetrics.touristsChange} today`,
       trend: 'up',
       icon: Users,
       severity: 'info',
@@ -211,19 +223,19 @@ export function DashboardOverview() {
                   <h3 className="text-sm text-red-900">Active Emergencies</h3>
                 </div>
                 <Badge variant="destructive" className="text-xs">
-                  {emergencies.length} Active
+                  {safeEmergencies.length} Active
                 </Badge>
               </div>
             </div>
 
             <div className="p-4 space-y-3">
-              {emergencies.length === 0 ? (
+              {safeEmergencies.length === 0 ? (
                 <div className="text-center py-8 text-neutral-500">
                   <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-green-500" />
                   <p className="text-sm">No active emergencies</p>
                 </div>
               ) : (
-                emergencies.map((emergency) => (
+                safeEmergencies.map((emergency) => (
                   <Card key={emergency.id} className="p-4 bg-white border-red-200 hover:shadow-sm transition-shadow">
                     <div className="space-y-3">
                       <div className="flex items-start justify-between">

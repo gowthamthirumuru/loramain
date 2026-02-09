@@ -19,6 +19,9 @@ module.exports = {
       pingTimeout: 60000,
       pingInterval: 25000
     });
+    console.log('[DEBUG] Socket Service Init. IO is:', !!io, typeof io);
+    if (io) console.log('[DEBUG] IO keys:', Object.keys(io));
+    if (io) console.log('[DEBUG] IO.to type:', typeof io.to);
 
     // ============================================
     // JWT Authentication Middleware
@@ -134,7 +137,11 @@ module.exports = {
   // ============================================
 
   emitToUser: (userId, event, data) => {
-    if (io) io.to(`user:${userId}`).emit(event, data);
+    console.log('[DEBUG] emitToUser called', { userId, event, ioExists: !!io });
+    if (io) {
+      console.log('[DEBUG] io.to is', typeof io.to);
+      io.to(`user:${userId}`).emit(event, data);
+    }
   },
 
   emitToRole: (role, event, data) => {
@@ -150,7 +157,7 @@ module.exports = {
   },
 
   emitSOSAlert: (alertData) => {
-    if (io) io.to('sos_alerts').emit('sos_alert', alertData);
+    if (io) io.emit('sos_alert', alertData);
   },
 
   broadcast: (event, data) => {

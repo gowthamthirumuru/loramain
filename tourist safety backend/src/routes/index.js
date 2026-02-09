@@ -26,6 +26,8 @@ const dashboardRoutes = require('./dashboardRoutes');
 const userRoutes = require('./userRoutes');
 const zoneRoutes = require('./zoneRoutes');
 const notificationRoutes = require('./notificationRoutes');
+const systemRoutes = require('./systemRoutes');
+const anchorRoutes = require('./anchorRoutes');
 
 // ========== Authentication Routes ==========
 router.use('/auth', authRoutes);
@@ -49,6 +51,8 @@ router.use('/dashboard', dashboardRoutes);
 router.use('/users', userRoutes);
 router.use('/zones', zoneRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/system', systemRoutes);
+router.use('/anchors', anchorRoutes);
 
 // Also expose tourists at /tourists for frontend compatibility
 router.use('/tourists', touristRoutes);

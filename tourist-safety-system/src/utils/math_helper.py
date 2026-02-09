@@ -70,21 +70,25 @@ class MathEngine:
             return None
 
     @staticmethod
-    def convert_to_gps(x, y):
+    def convert_to_gps(x, y, reference_point=None):
         """
         Converts local X,Y coordinates (meters) to GPS Latitude/Longitude.
         
         Args:
             x (float): Local X coordinate in meters
             y (float): Local Y coordinate in meters
+            reference_point (dict, optional): {'lat': float, 'lng': float}. Defaults to settings.
             
         Returns:
             tuple: (latitude, longitude)
         """
-        from config.settings import GPS_REFERENCE
-        
-        ref_lat = GPS_REFERENCE['lat']
-        ref_lng = GPS_REFERENCE['lng']
+        if reference_point:
+            ref_lat = reference_point.get('lat')
+            ref_lng = reference_point.get('lng')
+        else:
+            from config.settings import GPS_REFERENCE
+            ref_lat = GPS_REFERENCE['lat']
+            ref_lng = GPS_REFERENCE['lng']
         
         # Earth's radius in meters
         R = 6378137

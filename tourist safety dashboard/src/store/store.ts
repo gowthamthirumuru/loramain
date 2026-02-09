@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
 import { io, Socket } from 'socket.io-client';
 import { toast } from 'sonner';
-import { Alert, Emergency, ResponseTeam, Tourist, Anchor } from '../types/types';
+import { Alert, AlertStatus, Emergency, EmergencyStatus, ResponseTeam, TeamStatus, Tourist, Anchor, DashboardMetrics } from '../types/types';
 import { alertsApi, emergenciesApi, teamsApi, communicationsApi, dashboardApi, touristsApi, anchorsApi } from '../api/api';
 
 interface DashboardStore {
@@ -14,9 +14,13 @@ interface DashboardStore {
     conversations: any[];
     messages: any[];
     notifications: any[];
-    metrics: any;
+    metrics: DashboardMetrics | null;
     tourists: Tourist[];
     anchors: Anchor[];
+
+    // UI State
+    activeView: string;
+    setActiveView: (view: string) => void;
 
     // System Status
     systemStatus: {
@@ -29,6 +33,16 @@ interface DashboardStore {
     // Actions
     fetchInitialData: () => Promise<void>;
     addAlert: (alert: Alert) => void;
+    addNotification: (notification: any) => void;
+    markNotificationRead: (notificationId: number) => void;
+    updateAlertStatus: (id: string, status: AlertStatus) => void;
+    addMessage: (message: any) => void;
+    addEmergency: (emergency: Emergency) => void;
+    updateEmergencyStatus: (id: string, status: EmergencyStatus) => void;
+    resolveEmergency: (id: string) => void;
+    updateTeamStatus: (teamId: string, status: TeamStatus) => void;
+    deployTeam: (teamId: string, missionType: string) => void;
+    refreshData: () => Promise<void>;
 
     socket: Socket | null;
 
@@ -55,6 +69,7 @@ export const useDashboardStore = create<DashboardStore>()(
             metrics: null,
             tourists: [],
             anchors: [],
+            activeView: 'overview',
             systemStatus: {
                 gpsTracking: 'online',
                 communications: 'online',
@@ -63,16 +78,88 @@ export const useDashboardStore = create<DashboardStore>()(
             },
             socket: null,
 
+            setActiveView: (view) => set({ activeView: view }),
+
+            addNotification: (notification) => set((state) => ({
+                notifications: [notification, ...state.notifications]
+            })),
+
+            markNotificationRead: (notificationId) => set((state) => ({
+                notifications: state.notifications.map((n) =>
+                    n.id === notificationId ? { ...n, read: true } : n
+                )
+            })),
+
+            updateAlertStatus: (id, status) => set((state) => ({
+                alerts: state.alerts.map((a) =>
+                    a.id === id ? { ...a, status } : a
+                )
+            })),
+
+            addEmergency: (emergency) => set((state) => ({
+                emergencies: [emergency, ...state.emergencies]
+            })),
+
+            updateEmergencyStatus: (id, status) => set((state) => ({
+                emergencies: state.emergencies.map((e) =>
+                    e.id === id ? { ...e, status } : e
+                )
+            })),
+
+            resolveEmergency: (id) => set((state) => ({
+                emergencies: state.emergencies.map((e) =>
+                    e.id === id ? { ...e, status: 'resolved' as EmergencyStatus } : e
+                )
+            })),
+
+            addMessage: (message) => set((state) => ({
+                messages: [message, ...state.messages]
+            })),
+
+            updateTeamStatus: (teamId, status) => set((state) => ({
+                teams: state.teams.map((t) =>
+                    t.id === teamId ? { ...t, status } : t
+                )
+            })),
+
+            deployTeam: (teamId, missionType) => {
+                set((state) => ({
+                    teams: state.teams.map((t) =>
+                        t.id === teamId ? { ...t, status: 'responding', currentAssignment: missionType } : t
+                    )
+                }));
+                toast.success(`Team dispatched for ${missionType}`);
+            },
+
+            refreshData: async () => {
+                await get().fetchInitialData();
+            },
+
             fetchInitialData: async () => {
+                // Helper to safely extract array from API response
+                const toArray = <T>(data: T[] | { data?: T[] } | any): T[] => {
+                    if (Array.isArray(data)) return data;
+                    if (data && typeof data === 'object' && Array.isArray(data.data)) return data.data;
+                    return [];
+                };
+
                 try {
-                    const [alerts, emergencies, teams, tourists, anchors] = await Promise.all([
+                    const [alertsRes, emergenciesRes, teamsRes, touristsRes, anchorsRes, metrics] = await Promise.all([
                         alertsApi.getAll(),
                         emergenciesApi.getAll(),
                         teamsApi.getAll(),
                         touristsApi.getAll(),
-                        anchorsApi.getAll()
+                        anchorsApi.getAll(),
+                        dashboardApi.getMetrics()
                     ]);
-                    set({ alerts, emergencies, teams, tourists, anchors });
+                    set({
+                        alerts: toArray(alertsRes),
+                        emergencies: toArray(emergenciesRes),
+                        teams: toArray(teamsRes),
+                        tourists: toArray(touristsRes),
+                        anchors: toArray(anchorsRes),
+                        metrics
+                    });
                 } catch (error) {
                     console.error(error);
                     toast.error('Failed to fetch initial data');
@@ -135,7 +222,7 @@ export const useDashboardStore = create<DashboardStore>()(
                     const updatedTourists = state.tourists.map(t =>
                         t.id === data.tourist_id ? {
                             ...t,
-                            last_location: { x: data.x, y: data.y, lat: data.lat, lng: data.lng },
+                            location: { x: data.x, y: data.y, lat: data.lat, lng: data.lng, address: t.location?.address || 'Unknown' },
                             status: data.status,
                             last_seen: new Date(data.timestamp)
                         } : t
@@ -155,10 +242,11 @@ export const useDashboardStore = create<DashboardStore>()(
                     description: `SOS from ${data.tourist_name}`,
                     assignedTeam: undefined,
                     // Add missing required fields based on lint error: tourist, phone, createdAt, priority
-                    tourist: { name: data.tourist_name || 'Unknown', id: data.tourist_id || 'unknown' },
+                    tourist: data.tourist_name || 'Unknown',
+                    touristId: data.tourist_id || 'unknown',
                     phone: 'Unknown',
                     createdAt: new Date().toISOString(),
-                    priority: 'high'
+                    priority: 1 // High priority
                 };
 
                 get().addAlert(newAlert);

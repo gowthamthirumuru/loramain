@@ -25,6 +25,8 @@ model User {
   refreshToken  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  
+  actionLogs    ActionLog[]
 
   @@index([email])
   @@index([role])
@@ -176,4 +178,26 @@ model Message {
   isOwnMessage   Boolean      @default(false)
   createdAt      DateTime     @default(now())
   read           Boolean      @default(false)
+}
+
+model ActionLog {
+  id        String   @id @default(uuid())
+  action    String
+  details   String?
+  userId    String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  @@index([userId])
+  @@index([action])
+}
+
+model SystemSettings {
+  id        String   @id @default(uuid())
+  key       String   @unique // e.g., 'gps_reference'
+  value     Json     // e.g., { lat: 11.0, lng: 76.0 }
+  updatedAt DateTime @updatedAt
 }

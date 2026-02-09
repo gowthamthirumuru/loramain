@@ -29,11 +29,13 @@ const authenticateJWT = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('[DEBUG] Decoded:', decoded);
 
     // Find user using Prisma
     const user = await prisma.user.findUnique({
       where: { id: decoded.id }
     });
+    console.log('[DEBUG] User found:', user ? 'Yes' : 'No', user);
 
     if (!user) {
       return res.status(401).json({
@@ -127,10 +129,12 @@ const authenticateGateway = (req, res, next) => {
     });
   }
 
+  // Use strict equality check
   if (apiKey !== process.env.GATEWAY_API_KEY) {
+    logger.warn(`Invalid API Key attempt from ${req.ip}`);
     return res.status(403).json({
       success: false,
-      error: 'Invalid API key with Gateway',
+      error: 'Invalid API key',
       code: 'INVALID_API_KEY'
     });
   }

@@ -59,15 +59,49 @@ const checkOfflineTourists = async () => {
 };
 
 /**
+ * Cleanup old location logs
+ * Runs daily at midnight
+ */
+const cleanupOldData = async () => {
+    try {
+        const retentionDays = LIMITS.RETENTION_DAYS || 30;
+        const thresholdDate = new Date();
+        thresholdDate.setDate(thresholdDate.getDate() - retentionDays);
+
+        const deleted = await prisma.locationLog.deleteMany({
+            where: {
+                timestamp: {
+                    lt: thresholdDate
+                }
+            }
+        });
+
+
+
+
+        if (deleted.count > 0) {
+            logger.info(`[Cron] Cleaned up ${deleted.count} old location logs older than ${retentionDays} days`);
+        }
+    } catch (error) {
+        logger.error(`[Cron] Error cleaning up old data: ${error.message}`);
+    }
+};
+
+/**
  * Initialize all cron jobs
  */
 const initCronJobs = () => {
-    // Run every minute
+    // Run every minute for offline detection
     cron.schedule('* * * * *', checkOfflineTourists);
+
+    // Run every day at midnight for data cleanup
+    cron.schedule('0 0 * * *', cleanupOldData);
+
     logger.info('Cron jobs initialized');
 };
 
 module.exports = {
     initCronJobs,
-    checkOfflineTourists // Exported for testing
+    checkOfflineTourists,
+    cleanupOldData
 };
