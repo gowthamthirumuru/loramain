@@ -35,10 +35,11 @@ def run_relay(relay_id=None):
     # Initialize LoRa
     if IS_RASPBERRY_PI:
         from src.drivers.sx126x import sx126x
+        from config.settings import SERIAL_PORT
         
         # Setup as receiver with RSSI enabled
         node = sx126x(
-            serial_num='/dev/ttyS0',
+            serial_num=SERIAL_PORT,
             freq=865,
             addr=0,      # Address 0 to receive all broadcasts
             power=22,
