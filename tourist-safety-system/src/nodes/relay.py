@@ -74,6 +74,17 @@ def run_relay(relay_id=None):
                 if "PING" in message or "SOS" in message:
                     pings_received += 1
                     
+                    # Extract Tourist ID
+                    # Message format: "PING:DEVICE_ID" or "SOS:DEVICE_ID"
+                    try:
+                        parts = message.split(":")
+                        if len(parts) >= 2:
+                            tourist_id = parts[1].strip()
+                        else:
+                            tourist_id = "UNKNOWN"
+                    except:
+                        tourist_id = "UNKNOWN"
+
                     # Small delay to avoid collision with other relays
                     # Each relay should have different delay
                     delay = REPORT_DELAY
@@ -82,9 +93,11 @@ def run_relay(relay_id=None):
                     
                     time.sleep(delay)
                     
+                    msg_type = "SOS" if "SOS" in message else "PING"
+                    
                     # Send report to master
-                    # Format: "REPORT:ANCHOR_ID:RSSI"
-                    report = f"REPORT:{relay_id}:{rssi}"
+                    # Format: "REPORT:ANCHOR_ID:TOURIST_ID:RSSI:MSG_TYPE"
+                    report = f"REPORT:{relay_id}:{tourist_id}:{rssi}:{msg_type}"
                     
                     if node:
                         node.send(report.encode())

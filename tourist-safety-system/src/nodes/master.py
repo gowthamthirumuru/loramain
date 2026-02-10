@@ -190,12 +190,44 @@ class MasterNode:
         # Relay REPORT
         elif "REPORT" in msg:
             try:
+                # Format: "REPORT:ANCHOR_ID:TOURIST_ID:RSSI"
                 parts = msg.split(":")
-                sender_id = parts[1].strip().upper()
-                reported_rssi = int(parts[2])
-                self.current_readings[sender_id] = reported_rssi
-            except:
-                pass
+                
+                if len(parts) >= 4:
+                    sender_anchor_id = parts[1].strip().upper()
+                    reported_tourist_id = parts[2].strip().upper()
+                    reported_rssi = int(parts[3])
+                    
+                    # Check for SOS in 5th part
+                    if len(parts) >= 5:
+                        msg_type = parts[4].strip().upper()
+                        if "SOS" in msg_type:
+                            self.is_sos = True
+                            print(f"{Colors.RED}🚨 Relay {sender_anchor_id} reports SOS from {reported_tourist_id}{Colors.RESET}")
+                    
+                    # LOGIC: Ensure we are aggregating data for the SAME tourist
+                    # If we haven't locked onto a tourist yet (missed direct ping), accept this one.
+                    if self.current_device_id is None:
+                        self.current_device_id = reported_tourist_id
+                        self.last_ping_time = time.time() # Reset timeout
+                        print(f"{Colors.YELLOW}⚠ Indirect detection (Relay) for {self.current_device_id}{Colors.RESET}")
+                        
+                    # Only accept if it matches the current session
+                    if self.current_device_id == reported_tourist_id:
+                        self.current_readings[sender_anchor_id] = reported_rssi
+                    else:
+                        # Ignore reports for other tourists to prevent data corruption
+                        pass
+                
+                # Backward compatibility (Old format: "REPORT:ANCHOR_ID:RSSI")
+                elif len(parts) == 3:
+                     sender_anchor_id = parts[1].strip().upper()
+                     reported_rssi = int(parts[2])
+                     # We can't verify ID, so we blindly accept if we already have a session
+                     if self.current_device_id:
+                         self.current_readings[sender_anchor_id] = reported_rssi
+            except Exception as e:
+                print(f"{Colors.RED}Error parsing report: {e}{Colors.RESET}")
 
     def perform_trilateration(self):
         self.total_positions += 1
