@@ -65,20 +65,38 @@ export function DataProvider({ children }: DataProviderProps) {
                 console.log('Metrics loaded:', metrics.value);
             }
 
+            // Helper to safely extract array from response (non-generic for TSX compatibility)
+            function toArray(value: unknown): unknown[] {
+                if (!value) return [];
+                if (Array.isArray(value)) return value;
+                if (typeof value === 'object' && value !== null) {
+                    const obj = value as Record<string, unknown>;
+                    const keys = ['data', 'alerts', 'emergencies', 'teams', 'items'];
+                    for (const key of keys) {
+                        if (Array.isArray(obj[key])) return obj[key] as unknown[];
+                    }
+                }
+                return [];
+            }
+
             // Process alerts - add any new ones from API
-            if (alerts.status === 'fulfilled' && alerts.value.length > 0) {
-                alerts.value.forEach(alert => {
-                    if (!store.alerts.find(a => a.id === alert.id)) {
-                        store.addAlert(alert);
+            if (alerts.status === 'fulfilled') {
+                const alertsArray = toArray(alerts.value);
+                alertsArray.forEach((alert) => {
+                    const alertData = alert as any;
+                    if (!store.alerts.find(a => a.id === alertData.id)) {
+                        store.addAlert(alertData);
                     }
                 });
             }
 
             // Process emergencies
-            if (emergencies.status === 'fulfilled' && emergencies.value.length > 0) {
-                emergencies.value.forEach(emergency => {
-                    if (!store.emergencies.find(e => e.id === emergency.id)) {
-                        store.addEmergency(emergency);
+            if (emergencies.status === 'fulfilled') {
+                const emergenciesArray = toArray(emergencies.value);
+                emergenciesArray.forEach((emergency) => {
+                    const emergencyData = emergency as any;
+                    if (!store.emergencies.find(e => e.id === emergencyData.id)) {
+                        store.addEmergency(emergencyData);
                     }
                 });
             }

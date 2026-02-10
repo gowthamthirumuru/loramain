@@ -37,6 +37,7 @@ interface DashboardStore {
     markNotificationRead: (notificationId: number) => void;
     updateAlertStatus: (id: string, status: AlertStatus) => void;
     addMessage: (message: any) => void;
+    assignTeamToAlert: (alertId: string, teamId: string) => void;
     addEmergency: (emergency: Emergency) => void;
     updateEmergencyStatus: (id: string, status: EmergencyStatus) => void;
     resolveEmergency: (id: string) => void;
@@ -59,14 +60,111 @@ interface DashboardStore {
 export const useDashboardStore = create<DashboardStore>()(
     devtools(
         (set, get) => ({
-            alerts: [],
-            emergencies: [],
-            teams: [],
+            alerts: [
+                {
+                    id: 'alert-001',
+                    type: 'SOS',
+                    severity: 'critical',
+                    status: 'active',
+                    location: 'Taj Mahal, Agra',
+                    tourist: 'John Smith',
+                    touristId: 't1',
+                    phone: '+1 234 567 8900',
+                    description: 'Tourist pressed SOS button, possible medical emergency',
+                    time: '10:23 AM',
+                    createdAt: new Date().toISOString(),
+                    priority: 1
+                },
+                {
+                    id: 'alert-002',
+                    type: 'Lost',
+                    severity: 'high',
+                    status: 'responding',
+                    location: 'Jaipur Fort, Rajasthan',
+                    tourist: 'Maria Garcia',
+                    touristId: 't2',
+                    phone: '+34 612 345 678',
+                    description: 'Tourist separated from group, GPS signal weak',
+                    time: '09:45 AM',
+                    assignedTeam: 'Team Alpha',
+                    createdAt: new Date(Date.now() - 3600000).toISOString(),
+                    priority: 2
+                }
+            ],
+            emergencies: [
+                {
+                    id: 'emg-001',
+                    type: 'Medical',
+                    severity: 'critical',
+                    status: 'in_progress',
+                    location: 'Taj Mahal, Agra',
+                    coordinates: '27.1751,78.0421',
+                    tourist: 'John Smith',
+                    touristId: 't1',
+                    timeElapsed: '12 min',
+                    assignedTeam: 'Medical Team 1',
+                    createdAt: new Date().toISOString()
+                }
+            ],
+            teams: [
+                {
+                    id: 'team-alpha',
+                    name: 'Team Alpha',
+                    type: 'Search & Rescue',
+                    status: 'responding',
+                    location: 'Jaipur Fort',
+                    members: 4,
+                    eta: '8 min',
+                    currentAssignment: 'alert-002'
+                },
+                {
+                    id: 'team-beta',
+                    name: 'Team Beta',
+                    type: 'Medical',
+                    status: 'available',
+                    location: 'Agra Station',
+                    members: 3,
+                    eta: '5 min'
+                },
+                {
+                    id: 'team-gamma',
+                    name: 'Team Gamma',
+                    type: 'Security',
+                    status: 'available',
+                    location: 'Delhi Hub',
+                    members: 5,
+                    eta: '12 min'
+                },
+                {
+                    id: 'medical-1',
+                    name: 'Medical Team 1',
+                    type: 'Medical',
+                    status: 'responding',
+                    location: 'Taj Mahal',
+                    members: 2,
+                    eta: '3 min',
+                    currentAssignment: 'emg-001'
+                }
+            ],
             activeTeamId: null,
-            conversations: [],
+            conversations: [
+                { id: 1, participant: 'Team Alpha', type: 'radio', status: 'active', lastMessage: 'En route to location', time: '2 min ago', priority: 'high', unread: 0 },
+                { id: 2, participant: 'Control Center', type: 'phone', status: 'waiting', lastMessage: 'Awaiting update', time: '5 min ago', priority: 'medium', unread: 1 }
+            ],
             messages: [],
-            notifications: [],
-            metrics: null,
+            notifications: [
+                { id: 1, type: 'emergency', title: 'SOS Alert', message: 'New SOS from John Smith at Taj Mahal', time: '10:23 AM', read: false, severity: 'critical' },
+                { id: 2, type: 'system', title: 'Team Deployed', message: 'Medical Team 1 dispatched to Taj Mahal', time: '10:24 AM', read: false, severity: 'info' },
+                { id: 3, type: 'weather', title: 'Weather Alert', message: 'High heat warning for Agra region', time: '09:00 AM', read: true, severity: 'warning' }
+            ],
+            metrics: {
+                activeEmergencies: 1,
+                avgResponseTime: 5.8,
+                availableTeams: 2,
+                totalTeams: 4,
+                touristsTracked: 1247,
+                touristsChange: 23
+            },
             tourists: [],
             anchors: [],
             activeView: 'overview',
@@ -74,7 +172,7 @@ export const useDashboardStore = create<DashboardStore>()(
                 gpsTracking: 'online',
                 communications: 'online',
                 database: 'online',
-                websocket: 'connecting'
+                websocket: 'online'
             },
             socket: null,
 
@@ -116,6 +214,12 @@ export const useDashboardStore = create<DashboardStore>()(
                 messages: [message, ...state.messages]
             })),
 
+            assignTeamToAlert: (alertId, teamId) => set((state) => ({
+                alerts: state.alerts.map((a) =>
+                    a.id === alertId ? { ...a, assignedTeam: teamId } : a
+                )
+            })),
+
             updateTeamStatus: (teamId, status) => set((state) => ({
                 teams: state.teams.map((t) =>
                     t.id === teamId ? { ...t, status } : t
@@ -137,9 +241,17 @@ export const useDashboardStore = create<DashboardStore>()(
 
             fetchInitialData: async () => {
                 // Helper to safely extract array from API response
-                const toArray = <T>(data: T[] | { data?: T[] } | any): T[] => {
+                // Handles: raw arrays, { data: [] }, { alerts: [] }, { teams: [] }, etc.
+                const toArray = <T>(data: T[] | Record<string, any> | null | undefined): T[] => {
+                    if (!data) return [];
                     if (Array.isArray(data)) return data;
-                    if (data && typeof data === 'object' && Array.isArray(data.data)) return data.data;
+                    if (typeof data === 'object') {
+                        // Check common wrapper keys
+                        const keys = ['data', 'alerts', 'emergencies', 'teams', 'tourists', 'anchors', 'items', 'results'];
+                        for (const key of keys) {
+                            if (Array.isArray(data[key])) return data[key];
+                        }
+                    }
                     return [];
                 };
 
@@ -204,6 +316,22 @@ export const useDashboardStore = create<DashboardStore>()(
 
                 socket.on('tourist_offline', (data) => {
                     get().handleTouristOffline(data);
+                });
+
+                // Handle anchor updates from IoT gateway
+                socket.on('anchor:update', (data) => {
+                    set((state) => {
+                        const existingIndex = state.anchors.findIndex(a => a.id === data.id || a.anchor_id === data.anchor_id);
+                        if (existingIndex >= 0) {
+                            // Update existing anchor
+                            const updatedAnchors = [...state.anchors];
+                            updatedAnchors[existingIndex] = { ...updatedAnchors[existingIndex], ...data };
+                            return { anchors: updatedAnchors };
+                        } else {
+                            // Add new anchor
+                            return { anchors: [...state.anchors, data] };
+                        }
+                    });
                 });
 
                 set({ socket });

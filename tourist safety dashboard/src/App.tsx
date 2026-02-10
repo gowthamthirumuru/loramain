@@ -17,6 +17,7 @@ import TouristRegistration from "./components/TouristRegistration";
 import AuditLogViewer from "./components/AuditLogViewer";
 import { Toaster } from "./components/ui/sonner";
 import { useAuth } from "./auth/AuthContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { Button } from "./components/ui/button";
 import { Badge } from "./components/ui/badge";
 import {
@@ -436,7 +437,9 @@ export default function App() {
           </div>
         </header>
         <main className="flex-1 overflow-y-auto bg-background">
-          {renderActiveView()}
+          <ErrorBoundary>
+            {renderActiveView()}
+          </ErrorBoundary>
         </main>
       </div>
       <Toaster />

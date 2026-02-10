@@ -187,3 +187,73 @@
 html {
   font-size: var(--font-size);
 }
+
+/* Fix for dark theme inputs - ensure white text on dark backgrounds */
+input,
+textarea,
+select {
+  color: white !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #94a3b8 !important;
+  /* slate-400 */
+}
+
+/* Ensure option text is also visible */
+option {
+  color: white !important;
+  background-color: #1e293b !important;
+}
+
+/* Comprehensive dark theme text fixes */
+/* Force all text in dark gradient backgrounds to be white */
+[style*="linear-gradient"] label,
+[style*="linear-gradient"] p,
+[style*="linear-gradient"] span,
+[style*="linear-gradient"] h1,
+[style*="linear-gradient"] h2,
+[style*="linear-gradient"] h3,
+[style*="linear-gradient"] h4,
+[style*="linear-gradient"] div {
+  color: white;
+}
+
+/* Dark background containers - all text white */
+.bg-slate-800,
+.bg-slate-700,
+.bg-slate-900 {
+  color: white !important;
+}
+
+.bg-slate-800 *,
+.bg-slate-700 *,
+.bg-slate-900 * {
+  color: inherit;
+}
+
+/* Specific overrides for colored badges/labels */
+.text-green-400 {
+  color: #4ade80 !important;
+}
+
+.text-red-400 {
+  color: #f87171 !important;
+}
+
+.text-cyan-400 {
+  color: #22d3ee !important;
+}
+
+.text-slate-400 {
+  color: #94a3b8 !important;
+}
+
+.text-slate-300 {
+  color: #cbd5e1 !important;
+}
+
+.text-white {
+  color: #ffffff !important;
+}

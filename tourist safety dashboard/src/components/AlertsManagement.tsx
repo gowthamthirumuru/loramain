@@ -39,24 +39,48 @@ export function AlertsManagement() {
     }
   };
 
-  const filteredAlerts = useMemo(() => alerts.filter(alert => {
-    const matchesSearch = alert.tourist.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      alert.location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      alert.type.toLowerCase().includes(searchTerm.toLowerCase());
+  // Helper to safely get tourist name (handles both string and object)
+  const getTouristName = (tourist: any): string => {
+    if (!tourist) return 'Unknown';
+    if (typeof tourist === 'string') return tourist;
+    if (typeof tourist === 'object' && tourist.name) return tourist.name;
+    return 'Unknown';
+  };
+
+  // Helper to safely get location string (handles both string and object)
+  const getLocationString = (location: any): string => {
+    if (!location) return 'Unknown';
+    if (typeof location === 'string') return location;
+    if (typeof location === 'object') {
+      if (location.address) return location.address;
+      if (location.lat && location.lng) return `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`;
+    }
+    return 'Unknown';
+  };
+
+  // Safely access alerts array
+  const safeAlerts = Array.isArray(alerts) ? alerts : [];
+
+  const filteredAlerts = useMemo(() => safeAlerts.filter(alert => {
+    const touristName = getTouristName(alert.tourist);
+    const locationStr = getLocationString(alert.location);
+    const matchesSearch = touristName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      locationStr.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (alert.type || '').toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || alert.status === statusFilter;
     return matchesSearch && matchesStatus;
-  }), [alerts, searchTerm, statusFilter]);
+  }), [safeAlerts, searchTerm, statusFilter]);
 
   const alertStats = useMemo(() => ({
-    total: alerts.length,
-    active: alerts.filter(a => a.status === 'active').length,
-    responding: alerts.filter(a => a.status === 'responding').length,
-    resolved: alerts.filter(a => a.status === 'resolved').length,
-  }), [alerts]);
+    total: safeAlerts.length,
+    active: safeAlerts.filter(a => a.status === 'active').length,
+    responding: safeAlerts.filter(a => a.status === 'responding').length,
+    resolved: safeAlerts.filter(a => a.status === 'resolved').length,
+  }), [safeAlerts]);
 
   const selected = useMemo(() =>
-    alerts.find(a => a.id === selectedAlertId) || null,
-    [alerts, selectedAlertId]
+    safeAlerts.find(a => a.id === selectedAlertId) || null,
+    [safeAlerts, selectedAlertId]
   );
 
   const handleDispatch = () => {
@@ -78,7 +102,7 @@ export function AlertsManagement() {
   const handleCall = () => {
     if (selected) {
       toast.info('Initiating call', {
-        description: `Calling ${selected.tourist} at ${selected.phone}...`
+        description: `Calling ${getTouristName(selected.tourist)} at ${selected.phone || 'N/A'}...`
       });
     }
   };
@@ -189,8 +213,8 @@ export function AlertsManagement() {
                       <span className="text-xs text-neutral-500">{alert.time}</span>
                     </div>
 
-                    <h4 className="text-sm text-neutral-900 mb-1">{alert.tourist}</h4>
-                    <p className="text-xs text-neutral-600 mb-1">{alert.location}</p>
+                    <h4 className="text-sm text-neutral-900 mb-1">{getTouristName(alert.tourist)}</h4>
+                    <p className="text-xs text-neutral-600 mb-1">{getLocationString(alert.location)}</p>
                     <p className="text-xs text-neutral-500">#{alert.id} • {alert.assignedTeam || 'Unassigned'}</p>
                   </div>
                 );
@@ -231,7 +255,7 @@ export function AlertsManagement() {
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <User className="w-4 h-4 text-neutral-400" />
-                      <span className="text-sm text-neutral-900">{selected.tourist}</span>
+                      <span className="text-sm text-neutral-900">{getTouristName(selected.tourist)}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Phone className="w-4 h-4 text-neutral-400" />
@@ -245,7 +269,7 @@ export function AlertsManagement() {
                   <div className="space-y-2">
                     <div className="flex items-center space-x-2">
                       <MapPin className="w-4 h-4 text-neutral-400" />
-                      <span className="text-sm text-neutral-900">{selected.location}</span>
+                      <span className="text-sm text-neutral-900">{getLocationString(selected.location)}</span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Radio className="w-4 h-4 text-neutral-400" />

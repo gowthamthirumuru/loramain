@@ -24,6 +24,12 @@ router.get('/device/:deviceId', touristController.getByDeviceId);
 // GET /api/tourist/:id - Get tourist by ID
 router.get('/:id', validateObjectId('id'), touristController.getById);
 
+// PUT /api/tourist/:id - Update tourist
+router.put('/:id', validateObjectId('id'), touristController.update);
+
+// DELETE /api/tourist/:id - Delete tourist
+router.delete('/:id', validateObjectId('id'), touristController.delete);
+
 // GET /api/tourist/:id/location - Get tourist current location
 router.get('/:id/location', validateObjectId('id'), touristController.getLocation);
 

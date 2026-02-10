@@ -22,7 +22,7 @@ import {
 import { apiClient as api } from '../api/api';
 
 interface Device {
-    _id: string;
+    id: string;
     deviceId: string;
     name: string;
     type: 'tourist' | 'anchor' | 'relay' | 'gateway';
@@ -31,7 +31,7 @@ interface Device {
     lastSeen: string;
     firmwareVersion?: string;
     assignedTo?: {
-        _id: string;
+        id: string;
         name: string;
     };
     location?: {
@@ -50,10 +50,10 @@ interface DeviceFormData {
 }
 
 const deviceTypeConfig = {
-    tourist: { color: '#22c55e', label: 'Tourist Device', icon: '👤' },
-    anchor: { color: '#3b82f6', label: 'Anchor Node', icon: '📍' },
-    relay: { color: '#a855f7', label: 'Relay Node', icon: '📡' },
-    gateway: { color: '#f59e0b', label: 'Gateway', icon: '🌐' }
+    tourist: { color: '#22c55e', bgColor: 'bg-green-50', borderColor: 'border-green-200', textColor: 'text-green-700', label: 'Tourist Device', icon: '👤' },
+    anchor: { color: '#3b82f6', bgColor: 'bg-blue-50', borderColor: 'border-blue-200', textColor: 'text-blue-700', label: 'Anchor Node', icon: '📍' },
+    relay: { color: '#a855f7', bgColor: 'bg-purple-50', borderColor: 'border-purple-200', textColor: 'text-purple-700', label: 'Relay Node', icon: '📡' },
+    gateway: { color: '#f59e0b', bgColor: 'bg-amber-50', borderColor: 'border-amber-200', textColor: 'text-amber-700', label: 'Gateway', icon: '🌐' }
 };
 
 export default function DeviceManagement() {
@@ -85,44 +85,7 @@ export default function DeviceManagement() {
             setDevices(response.data || []);
         } catch (error) {
             console.error('Failed to fetch devices:', error);
-            // Demo data for testing
-            setDevices([
-                {
-                    _id: '1',
-                    deviceId: 'LORA-001',
-                    name: 'Tourist Device #1',
-                    type: 'tourist',
-                    status: 'online',
-                    batteryLevel: 85,
-                    lastSeen: new Date().toISOString(),
-                    firmwareVersion: '1.2.0',
-                    location: { lat: 20.5937, lng: 78.9629 },
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    _id: '2',
-                    deviceId: 'ANCHOR-001',
-                    name: 'Beach Anchor',
-                    type: 'anchor',
-                    status: 'online',
-                    batteryLevel: 100,
-                    lastSeen: new Date().toISOString(),
-                    firmwareVersion: '1.2.0',
-                    location: { lat: 20.5, lng: 78.8 },
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    _id: '3',
-                    deviceId: 'RELAY-001',
-                    name: 'Mountain Relay',
-                    type: 'relay',
-                    status: 'offline',
-                    batteryLevel: 15,
-                    lastSeen: new Date(Date.now() - 3600000).toISOString(),
-                    firmwareVersion: '1.1.0',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
+            setDevices([]);
         } finally {
             setLoading(false);
         }
@@ -140,9 +103,9 @@ export default function DeviceManagement() {
 
     // Get battery icon and color
     const getBatteryInfo = (level: number) => {
-        if (level > 50) return { icon: Battery, color: 'text-green-400' };
-        if (level > 20) return { icon: BatteryWarning, color: 'text-yellow-400' };
-        return { icon: BatteryLow, color: 'text-red-400' };
+        if (level > 50) return { icon: Battery, color: 'text-green-600', bgColor: 'bg-green-50' };
+        if (level > 20) return { icon: BatteryWarning, color: 'text-amber-600', bgColor: 'bg-amber-50' };
+        return { icon: BatteryLow, color: 'text-red-600', bgColor: 'bg-red-50' };
     };
 
     // Get time ago string
@@ -183,7 +146,7 @@ export default function DeviceManagement() {
     const saveDevice = async () => {
         try {
             if (isEditing && selectedDevice) {
-                await api.put(`/devices/${selectedDevice._id}`, formData);
+                await api.put(`/devices/${selectedDevice.id}`, formData);
             } else {
                 await api.post('/devices', formData);
             }
@@ -222,27 +185,27 @@ export default function DeviceManagement() {
     };
 
     return (
-        <div className="h-full p-6 overflow-auto" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
+        <div className="h-full p-6 overflow-auto bg-background">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                        <Radio className="w-7 h-7 text-cyan-400" />
+                    <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-3">
+                        <Radio className="w-7 h-7 text-cyan-600" />
                         Device Management
                     </h1>
-                    <p className="text-slate-400 mt-1">Monitor and manage LoRa devices in the network</p>
+                    <p className="text-neutral-500 mt-1">Monitor and manage LoRa devices in the network</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={fetchDevices}
-                        className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex items-center gap-2"
+                        className="px-4 py-2 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-700 rounded-lg transition-colors flex items-center gap-2"
                     >
                         <RefreshCw className="w-4 h-4" />
                         Refresh
                     </button>
                     <button
                         onClick={openCreateDialog}
-                        className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg transition-all flex items-center gap-2"
+                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-all flex items-center gap-2"
                     >
                         <Plus className="w-5 h-5" />
                         Add Device
@@ -252,62 +215,61 @@ export default function DeviceManagement() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
+                <div className="bg-white border border-neutral-200 rounded-lg p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-slate-400 text-sm">Total Devices</p>
-                            <p className="text-2xl font-bold text-white mt-1">{stats.total}</p>
+                            <p className="text-neutral-500 text-sm">Total Devices</p>
+                            <p className="text-2xl font-bold text-neutral-900 mt-1">{stats.total}</p>
                         </div>
-                        <Radio className="w-8 h-8 text-slate-500" />
+                        <Radio className="w-8 h-8 text-neutral-400" />
                     </div>
                 </div>
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
+                <div className="bg-white border border-green-200 rounded-lg p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-slate-400 text-sm">Online</p>
-                            <p className="text-2xl font-bold text-green-400 mt-1">{stats.online}</p>
+                            <p className="text-neutral-500 text-sm">Online</p>
+                            <p className="text-2xl font-bold text-green-600 mt-1">{stats.online}</p>
                         </div>
                         <Wifi className="w-8 h-8 text-green-500" />
                     </div>
                 </div>
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
+                <div className="bg-white border border-red-200 rounded-lg p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-slate-400 text-sm">Offline</p>
-                            <p className="text-2xl font-bold text-red-400 mt-1">{stats.offline}</p>
+                            <p className="text-neutral-500 text-sm">Offline</p>
+                            <p className="text-2xl font-bold text-red-600 mt-1">{stats.offline}</p>
                         </div>
                         <WifiOff className="w-8 h-8 text-red-500" />
                     </div>
                 </div>
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
+                <div className="bg-white border border-amber-200 rounded-lg p-4 shadow-sm">
                     <div className="flex items-center justify-between">
                         <div>
-                            <p className="text-slate-400 text-sm">Low Battery</p>
-                            <p className="text-2xl font-bold text-yellow-400 mt-1">{stats.lowBattery}</p>
+                            <p className="text-neutral-500 text-sm">Low Battery</p>
+                            <p className="text-2xl font-bold text-amber-600 mt-1">{stats.lowBattery}</p>
                         </div>
-                        <BatteryLow className="w-8 h-8 text-yellow-500" />
+                        <BatteryLow className="w-8 h-8 text-amber-500" />
                     </div>
                 </div>
             </div>
 
             {/* Filters */}
-            <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4 mb-6">
+            <div className="bg-white border border-neutral-200 rounded-lg p-4 mb-6 shadow-sm">
                 <div className="flex items-center gap-4">
                     <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
                         <input
                             type="text"
                             placeholder="Search by name or device ID..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            className="w-full pl-10 pr-4 py-2 bg-white border border-neutral-300 rounded-lg text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                         />
                     </div>
                     <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                        className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        style={{ colorScheme: 'dark' }}
+                        className="px-4 py-2 bg-white border border-neutral-300 rounded-lg text-neutral-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     >
                         <option value="all">All Types</option>
                         <option value="tourist">Tourist Devices</option>
@@ -318,8 +280,7 @@ export default function DeviceManagement() {
                     <select
                         value={filterStatus}
                         onChange={(e) => setFilterStatus(e.target.value)}
-                        className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        style={{ colorScheme: 'dark' }}
+                        className="px-4 py-2 bg-white border border-neutral-300 rounded-lg text-neutral-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                     >
                         <option value="all">All Status</option>
                         <option value="online">Online</option>
@@ -330,32 +291,32 @@ export default function DeviceManagement() {
             </div>
 
             {/* Device Table */}
-            <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl overflow-hidden">
+            <div className="bg-white border border-neutral-200 rounded-lg overflow-hidden shadow-sm">
                 <table className="w-full">
                     <thead>
-                        <tr className="bg-slate-700/50">
-                            <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Device</th>
-                            <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Type</th>
-                            <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Status</th>
-                            <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Battery</th>
-                            <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Last Seen</th>
-                            <th className="text-left px-4 py-3 text-sm font-medium text-slate-300">Assigned To</th>
-                            <th className="text-right px-4 py-3 text-sm font-medium text-slate-300">Actions</th>
+                        <tr className="bg-neutral-50">
+                            <th className="text-left px-4 py-3 text-sm font-medium text-neutral-700">Device</th>
+                            <th className="text-left px-4 py-3 text-sm font-medium text-neutral-700">Type</th>
+                            <th className="text-left px-4 py-3 text-sm font-medium text-neutral-700">Status</th>
+                            <th className="text-left px-4 py-3 text-sm font-medium text-neutral-700">Battery</th>
+                            <th className="text-left px-4 py-3 text-sm font-medium text-neutral-700">Last Seen</th>
+                            <th className="text-left px-4 py-3 text-sm font-medium text-neutral-700">Assigned To</th>
+                            <th className="text-right px-4 py-3 text-sm font-medium text-neutral-700">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         {loading ? (
                             <tr>
-                                <td colSpan={7} className="text-center py-12 text-slate-400">
+                                <td colSpan={7} className="text-center py-12 text-neutral-500">
                                     Loading devices...
                                 </td>
                             </tr>
                         ) : filteredDevices.length === 0 ? (
                             <tr>
                                 <td colSpan={7} className="text-center py-12">
-                                    <Radio className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-                                    <p className="text-slate-400">No devices found</p>
-                                    <p className="text-sm text-slate-500 mt-1">Try adjusting your filters</p>
+                                    <Radio className="w-12 h-12 mx-auto mb-3 text-neutral-400" />
+                                    <p className="text-neutral-500">No devices found</p>
+                                    <p className="text-sm text-neutral-400 mt-1">Try adjusting your filters</p>
                                 </td>
                             </tr>
                         ) : (
@@ -365,25 +326,21 @@ export default function DeviceManagement() {
                                 const BatteryIcon = batteryInfo.icon;
 
                                 return (
-                                    <tr key={device._id} className="border-t border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                                    <tr key={device.id} className="border-t border-neutral-200 hover:bg-neutral-50 transition-colors">
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-lg bg-slate-700 flex items-center justify-center text-lg">
+                                                <div className="w-10 h-10 rounded-lg bg-neutral-100 flex items-center justify-center text-lg">
                                                     {typeConfig.icon}
                                                 </div>
                                                 <div>
-                                                    <p className="text-white font-medium">{device.name}</p>
-                                                    <p className="text-xs text-slate-400">{device.deviceId}</p>
+                                                    <p className="text-neutral-900 font-medium">{device.name}</p>
+                                                    <p className="text-xs text-neutral-500">{device.deviceId}</p>
                                                 </div>
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             <span
-                                                className="px-2 py-1 rounded text-xs font-medium"
-                                                style={{
-                                                    backgroundColor: `${typeConfig.color}20`,
-                                                    color: typeConfig.color
-                                                }}
+                                                className={`px-2 py-1 rounded text-xs font-medium ${typeConfig.bgColor} ${typeConfig.textColor} border ${typeConfig.borderColor}`}
                                             >
                                                 {typeConfig.label}
                                             </span>
@@ -391,12 +348,12 @@ export default function DeviceManagement() {
                                         <td className="px-4 py-3">
                                             <div className="flex items-center gap-2">
                                                 {device.status === 'online' ? (
-                                                    <Wifi className="w-4 h-4 text-green-400" />
+                                                    <Wifi className="w-4 h-4 text-green-600" />
                                                 ) : (
-                                                    <WifiOff className="w-4 h-4 text-red-400" />
+                                                    <WifiOff className="w-4 h-4 text-red-600" />
                                                 )}
-                                                <span className={`text-sm ${device.status === 'online' ? 'text-green-400' :
-                                                        device.status === 'offline' ? 'text-red-400' : 'text-yellow-400'
+                                                <span className={`text-sm ${device.status === 'online' ? 'text-green-600' :
+                                                    device.status === 'offline' ? 'text-red-600' : 'text-amber-600'
                                                     }`}>
                                                     {device.status}
                                                 </span>
@@ -411,29 +368,29 @@ export default function DeviceManagement() {
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
-                                            <div className="flex items-center gap-2 text-slate-400 text-sm">
+                                            <div className="flex items-center gap-2 text-neutral-500 text-sm">
                                                 <Clock className="w-4 h-4" />
                                                 {getTimeAgo(device.lastSeen)}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">
                                             {device.assignedTo ? (
-                                                <span className="text-cyan-400 text-sm">{device.assignedTo.name}</span>
+                                                <span className="text-cyan-600 text-sm">{device.assignedTo.name}</span>
                                             ) : (
-                                                <span className="text-slate-500 text-sm">Unassigned</span>
+                                                <span className="text-neutral-400 text-sm">Unassigned</span>
                                             )}
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button
                                                     onClick={() => openEditDialog(device)}
-                                                    className="p-2 rounded-lg hover:bg-slate-600/50 text-slate-400 hover:text-cyan-400 transition-colors"
+                                                    className="p-2 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-cyan-600 transition-colors"
                                                 >
                                                     <Edit3 className="w-4 h-4" />
                                                 </button>
                                                 <button
-                                                    onClick={() => deleteDevice(device._id)}
-                                                    className="p-2 rounded-lg hover:bg-slate-600/50 text-slate-400 hover:text-red-400 transition-colors"
+                                                    onClick={() => deleteDevice(device.id)}
+                                                    className="p-2 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-red-600 transition-colors"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
                                                 </button>
@@ -450,47 +407,46 @@ export default function DeviceManagement() {
             {/* Device Dialog */}
             {showDialog && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-md mx-4 shadow-2xl">
-                        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                            <h3 className="text-lg font-semibold text-white">
+                    <div className="bg-white rounded-lg border border-neutral-200 w-full max-w-md mx-4 shadow-2xl">
+                        <div className="flex items-center justify-between p-4 border-b border-neutral-200">
+                            <h3 className="text-lg font-semibold text-neutral-900">
                                 {isEditing ? 'Edit Device' : 'Add Device'}
                             </h3>
-                            <button onClick={closeDialog} className="text-slate-400 hover:text-white">
+                            <button onClick={closeDialog} className="text-neutral-400 hover:text-neutral-900">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
                         <div className="p-4 space-y-4">
                             <div>
-                                <label className="block text-sm text-slate-300 mb-1">Device ID</label>
+                                <label className="block text-sm text-neutral-700 mb-1">Device ID *</label>
                                 <input
                                     type="text"
                                     value={formData.deviceId}
                                     onChange={(e) => setFormData(prev => ({ ...prev, deviceId: e.target.value }))}
-                                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="w-full px-3 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                                     placeholder="e.g., LORA-001"
                                     disabled={isEditing}
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm text-slate-300 mb-1">Device Name</label>
+                                <label className="block text-sm text-neutral-700 mb-1">Device Name *</label>
                                 <input
                                     type="text"
                                     value={formData.name}
                                     onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="w-full px-3 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                                     placeholder="Enter device name"
                                 />
                             </div>
 
                             <div>
-                                <label className="block text-sm text-slate-300 mb-1">Device Type</label>
+                                <label className="block text-sm text-neutral-700 mb-1">Device Type</label>
                                 <select
                                     value={formData.type}
                                     onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
-                                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                    style={{ colorScheme: 'dark' }}
+                                    className="w-full px-3 py-2 !bg-white border border-neutral-300 rounded-lg !text-black focus:outline-none focus:ring-2 focus:ring-cyan-500"
                                 >
                                     <option value="tourist">Tourist Device</option>
                                     <option value="anchor">Anchor Node</option>
@@ -500,28 +456,28 @@ export default function DeviceManagement() {
                             </div>
 
                             <div>
-                                <label className="block text-sm text-slate-300 mb-1">Firmware Version</label>
+                                <label className="block text-sm text-neutral-700 mb-1">Firmware Version</label>
                                 <input
                                     type="text"
                                     value={formData.firmwareVersion}
                                     onChange={(e) => setFormData(prev => ({ ...prev, firmwareVersion: e.target.value }))}
-                                    className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                    className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-lg text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                                     placeholder="e.g., 1.0.0"
                                 />
                             </div>
                         </div>
 
-                        <div className="flex gap-3 p-4 border-t border-slate-700">
+                        <div className="flex gap-3 p-4 border-t border-neutral-200">
                             <button
                                 onClick={closeDialog}
-                                className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+                                className="flex-1 px-4 py-2 bg-neutral-200 hover:bg-neutral-300 text-neutral-700 rounded-lg transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={saveDevice}
                                 disabled={!formData.deviceId || !formData.name}
-                                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center gap-2"
                             >
                                 <Save className="w-4 h-4" />
                                 {isEditing ? 'Update' : 'Add'} Device

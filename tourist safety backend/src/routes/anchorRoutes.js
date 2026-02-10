@@ -7,8 +7,10 @@ const router = require('express').Router();
 const anchorController = require('../controllers/anchorController');
 const { authenticateJWT, requireRole } = require('../middleware/auth');
 
-// Public route - get all anchors (for map display)
+// Public routes - for IoT gateway and map display
 router.get('/', anchorController.getAll);
+router.get('/masters', anchorController.getMasters);
+router.post('/heartbeat', anchorController.heartbeat); // IoT gateway calls this
 
 // Protected routes
 router.get('/:id', authenticateJWT, anchorController.getById);

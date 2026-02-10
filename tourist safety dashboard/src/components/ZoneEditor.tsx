@@ -20,7 +20,7 @@ import { apiClient as api } from '../api/api';
 import 'leaflet/dist/leaflet.css';
 
 interface Zone {
-    _id: string;
+    id: string;
     name: string;
     type: 'safe' | 'danger' | 'restricted' | 'monitoring';
     riskLevel: number;
@@ -215,7 +215,7 @@ export default function ZoneEditor() {
             };
 
             if (isEditing && selectedZone) {
-                await api.put(`/zones/${selectedZone._id}`, payload);
+                await api.put(`/zones/${selectedZone.id}`, payload);
             } else {
                 await api.post('/zones', payload);
             }
@@ -288,14 +288,14 @@ export default function ZoneEditor() {
                     <select
                         value={filterType}
                         onChange={(e) => setFilterType(e.target.value)}
-                        className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        style={{ colorScheme: 'dark' }}
+                        className="w-full px-3 py-2 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+                        style={{ backgroundColor: '#1e293b', color: 'white' }}
                     >
-                        <option value="all">All Types</option>
-                        <option value="safe">Safe Zones</option>
-                        <option value="danger">Danger Zones</option>
-                        <option value="restricted">Restricted Areas</option>
-                        <option value="monitoring">Monitoring Zones</option>
+                        <option value="all" style={{ backgroundColor: '#1e293b', color: 'white' }}>All Types</option>
+                        <option value="safe" style={{ backgroundColor: '#1e293b', color: 'white' }}>Safe Zones</option>
+                        <option value="danger" style={{ backgroundColor: '#1e293b', color: 'white' }}>Danger Zones</option>
+                        <option value="restricted" style={{ backgroundColor: '#1e293b', color: 'white' }}>Restricted Areas</option>
+                        <option value="monitoring" style={{ backgroundColor: '#1e293b', color: 'white' }}>Monitoring Zones</option>
                     </select>
                 </div>
 
@@ -313,12 +313,12 @@ export default function ZoneEditor() {
                         filteredZones.map(zone => {
                             const config = zoneTypeConfig[zone.type];
                             const Icon = config.icon;
-                            const isHidden = hiddenZones.has(zone._id);
+                            const isHidden = hiddenZones.has(zone.id);
 
                             return (
                                 <div
-                                    key={zone._id}
-                                    className={`p-3 rounded-lg border transition-all cursor-pointer ${selectedZone?._id === zone._id
+                                    key={zone.id}
+                                    className={`p-3 rounded-lg border transition-all cursor-pointer ${selectedZone?.id === zone.id
                                         ? 'bg-cyan-500/20 border-cyan-500'
                                         : 'bg-slate-700/30 border-slate-600/50 hover:bg-slate-700/50'
                                         }`}
@@ -339,7 +339,7 @@ export default function ZoneEditor() {
                                         </div>
                                         <div className="flex items-center gap-1">
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); toggleZoneVisibility(zone._id); }}
+                                                onClick={(e) => { e.stopPropagation(); toggleZoneVisibility(zone.id); }}
                                                 className="p-1.5 rounded hover:bg-slate-600/50 text-slate-400 hover:text-white"
                                             >
                                                 {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -351,7 +351,7 @@ export default function ZoneEditor() {
                                                 <Edit3 className="w-4 h-4" />
                                             </button>
                                             <button
-                                                onClick={(e) => { e.stopPropagation(); deleteZone(zone._id); }}
+                                                onClick={(e) => { e.stopPropagation(); deleteZone(zone.id); }}
                                                 className="p-1.5 rounded hover:bg-slate-600/50 text-slate-400 hover:text-red-400"
                                             >
                                                 <Trash2 className="w-4 h-4" />
@@ -433,7 +433,7 @@ export default function ZoneEditor() {
 
                     {/* Render existing zones */}
                     {filteredZones
-                        .filter(zone => !hiddenZones.has(zone._id))
+                        .filter(zone => !hiddenZones.has(zone.id))
                         .map(zone => {
                             if (!zone.boundary?.coordinates?.[0]) return null;
                             const coords = toLeafletCoords(zone.boundary.coordinates[0]);
@@ -441,13 +441,13 @@ export default function ZoneEditor() {
 
                             return (
                                 <Polygon
-                                    key={zone._id}
+                                    key={zone.id}
                                     positions={coords}
                                     pathOptions={{
                                         color: config.color,
                                         fillColor: config.color,
-                                        fillOpacity: selectedZone?._id === zone._id ? 0.4 : 0.2,
-                                        weight: selectedZone?._id === zone._id ? 3 : 2
+                                        fillOpacity: selectedZone?.id === zone.id ? 0.4 : 0.2,
+                                        weight: selectedZone?.id === zone.id ? 3 : 2
                                     }}
                                     eventHandlers={{
                                         click: () => setSelectedZone(zone)
@@ -509,13 +509,13 @@ export default function ZoneEditor() {
                                 <select
                                     value={formData.type}
                                     onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
-                                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                    style={{ colorScheme: 'dark' }}
+                                    className="w-full px-3 py-2 border border-slate-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-cyan-500 cursor-pointer"
+                                    style={{ backgroundColor: '#1e293b', color: 'white' }}
                                 >
-                                    <option value="safe">Safe Zone</option>
-                                    <option value="danger">Danger Zone</option>
-                                    <option value="restricted">Restricted Area</option>
-                                    <option value="monitoring">Monitoring Zone</option>
+                                    <option value="safe" style={{ backgroundColor: '#1e293b', color: 'white' }}>Safe Zone</option>
+                                    <option value="danger" style={{ backgroundColor: '#1e293b', color: 'white' }}>Danger Zone</option>
+                                    <option value="restricted" style={{ backgroundColor: '#1e293b', color: 'white' }}>Restricted Area</option>
+                                    <option value="monitoring" style={{ backgroundColor: '#1e293b', color: 'white' }}>Monitoring Zone</option>
                                 </select>
                             </div>
 

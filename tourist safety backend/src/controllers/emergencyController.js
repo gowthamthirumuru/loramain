@@ -5,23 +5,32 @@ const { successResponse } = require('../utils/helpers');
 exports.getAll = asyncHandler(async (req, res) => {
     const alerts = await prisma.sOSAlert.findMany({
         where: { status: { not: 'resolved' } },
-        include: { tourist: true },
+        include: { tourist: true, assignedTeam: true },
         orderBy: { created_at: 'desc' }
     });
 
     // Map to Emergency interface expected by frontend
+    // Frontend EmergencyStatus: 'dispatched' | 'in_progress' | 'searching' | 'resolved'
+    // Backend SOSAlert status: 'active' | 'responding' | 'investigating' | 'resolved'
+    const statusMap = {
+        'active': 'dispatched',
+        'responding': 'in_progress',
+        'investigating': 'searching',
+        'resolved': 'resolved'
+    };
+
     const emergencies = alerts.map(alert => ({
         id: alert.id,
-        type: 'SOS', // or derive from alert.notes
-        severity: 'critical', // Default for SOS
+        type: alert.type || 'SOS',
+        severity: alert.severity || 'critical',
         location: typeof alert.location === 'string' ? alert.location : 'Unknown',
         coordinates: JSON.stringify(alert.location),
         tourist: alert.tourist ? alert.tourist.name : 'Unknown',
         touristId: alert.tourist_id,
-        status: alert.status === 'active' ? 'in_progress' : alert.status, // Map status
+        status: statusMap[alert.status] || 'dispatched',
         timeElapsed: calculateTimeElapsed(alert.created_at),
         createdAt: alert.created_at,
-        assignedTeam: 'Unassigned', // Placeholder until team relation is added
+        assignedTeam: alert.assignedTeam ? alert.assignedTeam.name : 'Unassigned',
         notes: alert.notes
     }));
 

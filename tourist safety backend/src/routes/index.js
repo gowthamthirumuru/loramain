@@ -28,6 +28,7 @@ const zoneRoutes = require('./zoneRoutes');
 const notificationRoutes = require('./notificationRoutes');
 const systemRoutes = require('./systemRoutes');
 const anchorRoutes = require('./anchorRoutes');
+const deviceRoutes = require('./deviceRoutes');
 
 // ========== Authentication Routes ==========
 router.use('/auth', authRoutes);
@@ -53,6 +54,7 @@ router.use('/zones', zoneRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/system', systemRoutes);
 router.use('/anchors', anchorRoutes);
+router.use('/devices', deviceRoutes);
 
 // Also expose tourists at /tourists for frontend compatibility
 router.use('/tourists', touristRoutes);

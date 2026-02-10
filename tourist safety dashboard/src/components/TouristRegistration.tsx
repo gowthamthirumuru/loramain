@@ -12,19 +12,16 @@ import {
     Globe,
     Calendar,
     Users,
-    MapPin,
     Radio,
     AlertCircle,
     CheckCircle,
     Clock,
-    Filter,
-    Download,
     Eye
 } from 'lucide-react';
 import { apiClient as api } from '../api/api';
 
 interface Tourist {
-    _id: string;
+    id: string;
     name: string;
     email: string;
     phone: string;
@@ -40,10 +37,7 @@ interface Tourist {
         groupSize: number;
         zones: string[];
     };
-    device?: {
-        _id: string;
-        deviceId: string;
-    };
+    device_id?: string;
     status: 'registered' | 'active' | 'completed' | 'emergency';
     createdAt: string;
 }
@@ -62,20 +56,27 @@ interface TouristFormData {
     deviceId: string;
 }
 
-const statusConfig = {
-    registered: { color: '#3b82f6', label: 'Registered', icon: Clock },
-    active: { color: '#22c55e', label: 'Active Trip', icon: CheckCircle },
-    completed: { color: '#6b7280', label: 'Completed', icon: CheckCircle },
-    emergency: { color: '#ef4444', label: 'Emergency', icon: AlertCircle }
+const defaultStatusConfig = { color: '#6b7280', bgColor: 'bg-gray-50', borderColor: 'border-gray-200', textColor: 'text-gray-700', label: 'Unknown', icon: Clock };
+
+const statusConfig: Record<string, typeof defaultStatusConfig> = {
+    registered: { color: '#3b82f6', bgColor: 'bg-blue-50', borderColor: 'border-blue-200', textColor: 'text-blue-700', label: 'Registered', icon: Clock },
+    active: { color: '#22c55e', bgColor: 'bg-green-50', borderColor: 'border-green-200', textColor: 'text-green-700', label: 'Active Trip', icon: CheckCircle },
+    completed: { color: '#6b7280', bgColor: 'bg-gray-50', borderColor: 'border-gray-200', textColor: 'text-gray-700', label: 'Completed', icon: CheckCircle },
+    emergency: { color: '#ef4444', bgColor: 'bg-red-50', borderColor: 'border-red-200', textColor: 'text-red-700', label: 'Emergency', icon: AlertCircle },
+    // Backend may use 'SOS' instead of 'emergency'
+    SOS: { color: '#ef4444', bgColor: 'bg-red-50', borderColor: 'border-red-200', textColor: 'text-red-700', label: 'SOS', icon: AlertCircle },
+    finished: { color: '#6b7280', bgColor: 'bg-gray-50', borderColor: 'border-gray-200', textColor: 'text-gray-700', label: 'Finished', icon: CheckCircle }
 };
 
 export default function TouristRegistration() {
+    // State for view mode: 'list' | 'form'
+    const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
+
     const [tourists, setTourists] = useState<Tourist[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState<string>('all');
     const [selectedTourist, setSelectedTourist] = useState<Tourist | null>(null);
-    const [showDialog, setShowDialog] = useState(false);
     const [showDetailsDialog, setShowDetailsDialog] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [availableDevices, setAvailableDevices] = useState<any[]>([]);
@@ -107,53 +108,16 @@ export default function TouristRegistration() {
         try {
             setLoading(true);
             const response = await api.get('/tourists');
-            setTourists(response.data || []);
+            // Handle both flat array and wrapped response formats
+            let data = response.data;
+            if (data && !Array.isArray(data)) {
+                // Check for common wrapper keys
+                data = data.tourists || data.data || data.items || [];
+            }
+            setTourists(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to fetch tourists:', error);
-            // Demo data
-            setTourists([
-                {
-                    _id: '1',
-                    name: 'John Smith',
-                    email: 'john@example.com',
-                    phone: '+1 234 567 8900',
-                    nationality: 'USA',
-                    emergencyContact: {
-                        name: 'Jane Smith',
-                        phone: '+1 234 567 8901',
-                        relation: 'Spouse'
-                    },
-                    tripDetails: {
-                        startDate: '2026-01-10',
-                        endDate: '2026-01-15',
-                        groupSize: 2,
-                        zones: ['Beach Zone', 'Mountain Trail']
-                    },
-                    device: { _id: '1', deviceId: 'LORA-001' },
-                    status: 'active',
-                    createdAt: new Date().toISOString()
-                },
-                {
-                    _id: '2',
-                    name: 'Maria Garcia',
-                    email: 'maria@example.com',
-                    phone: '+34 612 345 678',
-                    nationality: 'Spain',
-                    emergencyContact: {
-                        name: 'Carlos Garcia',
-                        phone: '+34 612 345 679',
-                        relation: 'Brother'
-                    },
-                    tripDetails: {
-                        startDate: '2026-01-12',
-                        endDate: '2026-01-18',
-                        groupSize: 4,
-                        zones: ['Forest Zone']
-                    },
-                    status: 'registered',
-                    createdAt: new Date().toISOString()
-                }
-            ]);
+            setTourists([]); // Ensure empty array on error, NO DEMO DATA
         } finally {
             setLoading(false);
         }
@@ -164,16 +128,14 @@ export default function TouristRegistration() {
             const response = await api.get('/devices?status=online&unassigned=true');
             setAvailableDevices(response.data || []);
         } catch (error) {
-            // Demo devices
-            setAvailableDevices([
-                { _id: '1', deviceId: 'LORA-002', name: 'Tourist Device #2' },
-                { _id: '2', deviceId: 'LORA-003', name: 'Tourist Device #3' }
-            ]);
+            console.error('Failed to fetch devices:', error);
+            setAvailableDevices([]); // Ensure empty array on error, NO DEMO DATA
         }
     };
 
-    // Filter tourists
-    const filteredTourists = tourists.filter(tourist => {
+    // Filter tourists - ensure tourists is an array
+    const safeTourists = Array.isArray(tourists) ? tourists : [];
+    const filteredTourists = safeTourists.filter(tourist => {
         const matchesSearch =
             tourist.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             tourist.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -182,8 +144,17 @@ export default function TouristRegistration() {
         return matchesSearch && matchesStatus;
     });
 
-    // Open create dialog
-    const openCreateDialog = () => {
+    // Determine current title based on view mode
+    const pageTitle = viewMode === 'list'
+        ? 'Tourist Registration'
+        : (isEditing ? 'Edit Tourist' : 'Register New Tourist');
+
+    const pageSubtitle = viewMode === 'list'
+        ? 'Register and manage tourist information'
+        : 'Enter tourist details below';
+
+    // Switch to create form
+    const switchToCreate = () => {
         setIsEditing(false);
         const today = new Date().toISOString().split('T')[0];
         setFormData({
@@ -199,27 +170,34 @@ export default function TouristRegistration() {
             groupSize: 1,
             deviceId: ''
         });
-        setShowDialog(true);
+        setViewMode('form');
     };
 
-    // Open edit dialog
-    const openEditDialog = (tourist: Tourist) => {
+    // Switch to edit form
+    const switchToEdit = (tourist: Tourist) => {
         setSelectedTourist(tourist);
         setIsEditing(true);
         setFormData({
-            name: tourist.name,
-            email: tourist.email,
-            phone: tourist.phone,
-            nationality: tourist.nationality,
-            emergencyContactName: tourist.emergencyContact.name,
-            emergencyContactPhone: tourist.emergencyContact.phone,
-            emergencyContactRelation: tourist.emergencyContact.relation,
-            startDate: tourist.tripDetails.startDate,
-            endDate: tourist.tripDetails.endDate,
-            groupSize: tourist.tripDetails.groupSize,
-            deviceId: tourist.device?.deviceId || ''
+            name: tourist.name || '',
+            email: tourist.email || '',
+            phone: tourist.phone || '',
+            nationality: tourist.nationality || '',
+            emergencyContactName: tourist.emergencyContact?.name || '',
+            emergencyContactPhone: tourist.emergencyContact?.phone || '',
+            emergencyContactRelation: tourist.emergencyContact?.relation || '',
+            startDate: tourist.tripDetails?.startDate || '',
+            endDate: tourist.tripDetails?.endDate || '',
+            groupSize: tourist.tripDetails?.groupSize || 1,
+            deviceId: tourist.device_id || ''
         });
-        setShowDialog(true);
+        setViewMode('form');
+    };
+
+    // Switch back to list
+    const backToList = () => {
+        setViewMode('list');
+        setIsEditing(false);
+        setSelectedTourist(null);
     };
 
     // View tourist details
@@ -247,17 +225,17 @@ export default function TouristRegistration() {
                     groupSize: formData.groupSize,
                     zones: []
                 },
-                deviceId: formData.deviceId
+                device_id: formData.deviceId
             };
 
             if (isEditing && selectedTourist) {
-                await api.put(`/tourists/${selectedTourist._id}`, payload);
+                await api.put(`/tourists/${selectedTourist.id}`, payload);
             } else {
                 await api.post('/tourists', payload);
             }
 
             await fetchTourists();
-            closeDialog();
+            backToList(); // Return to list view after save
         } catch (error) {
             console.error('Failed to save tourist:', error);
         }
@@ -275,382 +253,370 @@ export default function TouristRegistration() {
         }
     };
 
-    // Close dialogs
-    const closeDialog = () => {
-        setShowDialog(false);
-        setIsEditing(false);
-        setSelectedTourist(null);
-    };
-
-    // Stats
+    // Stats - use safeTourists to prevent crashes
     const stats = {
-        total: tourists.length,
-        active: tourists.filter(t => t.status === 'active').length,
-        registered: tourists.filter(t => t.status === 'registered').length,
-        emergency: tourists.filter(t => t.status === 'emergency').length
+        total: safeTourists.length,
+        active: safeTourists.filter(t => t.status === 'active').length,
+        registered: safeTourists.filter(t => t.status === 'registered').length,
+        emergency: safeTourists.filter(t => t.status === 'emergency').length
     };
 
     return (
-        <div className="h-full p-6 overflow-auto" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
+        <div className="h-full p-6 overflow-auto bg-background">
             {/* Header */}
             <div className="flex items-center justify-between mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                        <Users className="w-7 h-7 text-cyan-400" />
-                        Tourist Registration
+                    <h1 className="text-2xl font-bold text-neutral-900 flex items-center gap-3">
+                        {viewMode === 'form' && (
+                            <button onClick={backToList} className="mr-2 hover:bg-neutral-100 p-1 rounded-full transition-colors">
+                                <X className="w-6 h-6 text-neutral-500" />
+                            </button>
+                        )}
+                        <Users className="w-7 h-7 text-cyan-600" />
+                        {pageTitle}
                     </h1>
-                    <p className="text-slate-400 mt-1">Register and manage tourist information</p>
+                    <p className="text-neutral-500 mt-1 ml-11">{pageSubtitle}</p>
                 </div>
-                <button
-                    onClick={openCreateDialog}
-                    className="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg transition-all flex items-center gap-2"
-                >
-                    <Plus className="w-5 h-5" />
-                    Register Tourist
-                </button>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-4 gap-4 mb-6">
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-slate-400 text-sm">Total Registered</p>
-                            <p className="text-2xl font-bold text-white mt-1">{stats.total}</p>
-                        </div>
-                        <Users className="w-8 h-8 text-slate-500" />
-                    </div>
-                </div>
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-slate-400 text-sm">Active Trips</p>
-                            <p className="text-2xl font-bold text-green-400 mt-1">{stats.active}</p>
-                        </div>
-                        <CheckCircle className="w-8 h-8 text-green-500" />
-                    </div>
-                </div>
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-slate-400 text-sm">Pending Start</p>
-                            <p className="text-2xl font-bold text-blue-400 mt-1">{stats.registered}</p>
-                        </div>
-                        <Clock className="w-8 h-8 text-blue-500" />
-                    </div>
-                </div>
-                <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-slate-400 text-sm">Emergency</p>
-                            <p className="text-2xl font-bold text-red-400 mt-1">{stats.emergency}</p>
-                        </div>
-                        <AlertCircle className="w-8 h-8 text-red-500" />
-                    </div>
-                </div>
-            </div>
-
-            {/* Filters */}
-            <div className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4 mb-6">
-                <div className="flex items-center gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                            type="text"
-                            placeholder="Search by name, email, or phone..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        />
-                    </div>
-                    <select
-                        value={filterStatus}
-                        onChange={(e) => setFilterStatus(e.target.value)}
-                        className="px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                        style={{ colorScheme: 'dark' }}
+                {viewMode === 'list' && (
+                    <button
+                        onClick={switchToCreate}
+                        className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-all flex items-center gap-2"
                     >
-                        <option value="all">All Status</option>
-                        <option value="registered">Registered</option>
-                        <option value="active">Active</option>
-                        <option value="completed">Completed</option>
-                        <option value="emergency">Emergency</option>
-                    </select>
-                </div>
-            </div>
-
-            {/* Tourist Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {loading ? (
-                    <div className="col-span-full text-center py-12 text-slate-400">
-                        Loading tourists...
-                    </div>
-                ) : filteredTourists.length === 0 ? (
-                    <div className="col-span-full text-center py-12">
-                        <Users className="w-12 h-12 mx-auto mb-3 text-slate-600" />
-                        <p className="text-slate-400">No tourists found</p>
-                        <p className="text-sm text-slate-500 mt-1">Register a new tourist to get started</p>
-                    </div>
-                ) : (
-                    filteredTourists.map(tourist => {
-                        const statusInfo = statusConfig[tourist.status];
-                        const StatusIcon = statusInfo.icon;
-
-                        return (
-                            <div
-                                key={tourist._id}
-                                className="bg-slate-800/50 backdrop-blur border border-slate-700/50 rounded-xl p-4 hover:border-cyan-500/50 transition-all"
-                            >
-                                <div className="flex items-start justify-between mb-3">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-lg">
-                                            {tourist.name.charAt(0)}
-                                        </div>
-                                        <div>
-                                            <h3 className="text-white font-medium">{tourist.name}</h3>
-                                            <p className="text-xs text-slate-400 flex items-center gap-1">
-                                                <Globe className="w-3 h-3" />
-                                                {tourist.nationality}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    <span
-                                        className="px-2 py-1 rounded text-xs font-medium flex items-center gap-1"
-                                        style={{
-                                            backgroundColor: `${statusInfo.color}20`,
-                                            color: statusInfo.color
-                                        }}
-                                    >
-                                        <StatusIcon className="w-3 h-3" />
-                                        {statusInfo.label}
-                                    </span>
-                                </div>
-
-                                <div className="space-y-2 text-sm">
-                                    <div className="flex items-center gap-2 text-slate-400">
-                                        <Mail className="w-4 h-4" />
-                                        <span className="truncate">{tourist.email}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-slate-400">
-                                        <Phone className="w-4 h-4" />
-                                        <span>{tourist.phone}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-slate-400">
-                                        <Calendar className="w-4 h-4" />
-                                        <span>{tourist.tripDetails.startDate} → {tourist.tripDetails.endDate}</span>
-                                    </div>
-                                    {tourist.device && (
-                                        <div className="flex items-center gap-2 text-cyan-400">
-                                            <Radio className="w-4 h-4" />
-                                            <span>{tourist.device.deviceId}</span>
-                                        </div>
-                                    )}
-                                </div>
-
-                                <div className="flex items-center gap-2 mt-4 pt-3 border-t border-slate-700/50">
-                                    <button
-                                        onClick={() => viewDetails(tourist)}
-                                        className="flex-1 px-3 py-1.5 bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-sm"
-                                    >
-                                        <Eye className="w-4 h-4" />
-                                        View
-                                    </button>
-                                    <button
-                                        onClick={() => openEditDialog(tourist)}
-                                        className="p-1.5 rounded-lg hover:bg-slate-600/50 text-slate-400 hover:text-cyan-400 transition-colors"
-                                    >
-                                        <Edit3 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                        onClick={() => deleteTourist(tourist._id)}
-                                        className="p-1.5 rounded-lg hover:bg-slate-600/50 text-slate-400 hover:text-red-400 transition-colors"
-                                    >
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            </div>
-                        );
-                    })
+                        <Plus className="w-5 h-5" />
+                        Register Tourist
+                    </button>
                 )}
             </div>
 
-            {/* Registration Dialog */}
-            {showDialog && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-2xl shadow-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between p-4 border-b border-slate-700 sticky top-0 bg-slate-800">
-                            <h3 className="text-lg font-semibold text-white">
-                                {isEditing ? 'Edit Tourist' : 'Register Tourist'}
-                            </h3>
-                            <button onClick={closeDialog} className="text-slate-400 hover:text-white">
-                                <X className="w-5 h-5" />
-                            </button>
+            {viewMode === 'list' ? (
+                <>
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-4 gap-4 mb-6">
+                        <div className="bg-white border border-neutral-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-neutral-500 text-sm">Total Registered</p>
+                                    <p className="text-2xl font-bold text-neutral-900 mt-1">{stats.total}</p>
+                                </div>
+                                <Users className="w-8 h-8 text-neutral-400" />
+                            </div>
+                        </div>
+                        <div className="bg-white border border-green-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-neutral-500 text-sm">Active Trips</p>
+                                    <p className="text-2xl font-bold text-green-600 mt-1">{stats.active}</p>
+                                </div>
+                                <CheckCircle className="w-8 h-8 text-green-500" />
+                            </div>
+                        </div>
+                        <div className="bg-white border border-blue-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-neutral-500 text-sm">Pending Start</p>
+                                    <p className="text-2xl font-bold text-blue-600 mt-1">{stats.registered}</p>
+                                </div>
+                                <Clock className="w-8 h-8 text-blue-500" />
+                            </div>
+                        </div>
+                        <div className="bg-white border border-red-200 rounded-lg p-4 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-neutral-500 text-sm">Emergency</p>
+                                    <p className="text-2xl font-bold text-red-600 mt-1">{stats.emergency}</p>
+                                </div>
+                                <AlertCircle className="w-8 h-8 text-red-500" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Filters */}
+                    <div className="bg-white border border-neutral-200 rounded-lg p-4 mb-6 shadow-sm">
+                        <div className="flex items-center gap-4">
+                            <div className="flex-1 relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Search by name, email, or phone..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 bg-white border border-neutral-300 rounded-lg text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                                />
+                            </div>
+                            <select
+                                value={filterStatus}
+                                onChange={(e) => setFilterStatus(e.target.value)}
+                                className="px-4 py-2 bg-white border border-neutral-300 rounded-lg text-neutral-900 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            >
+                                <option value="all">All Status</option>
+                                <option value="registered">Registered</option>
+                                <option value="active">Active</option>
+                                <option value="completed">Completed</option>
+                                <option value="emergency">Emergency</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* Tourist Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {loading ? (
+                            <div className="col-span-full text-center py-12 text-neutral-500">
+                                Loading tourists...
+                            </div>
+                        ) : filteredTourists.length === 0 ? (
+                            <div className="col-span-full text-center py-12">
+                                <Users className="w-12 h-12 mx-auto mb-3 text-neutral-400" />
+                                <p className="text-neutral-500">No tourists found</p>
+                                <p className="text-sm text-neutral-400 mt-1">Register a new tourist to get started</p>
+                            </div>
+                        ) : (
+                            filteredTourists.map(tourist => {
+                                const statusInfo = statusConfig[tourist.status] || defaultStatusConfig;
+                                const StatusIcon = statusInfo.icon;
+
+                                return (
+                                    <div
+                                        key={tourist.id}
+                                        className={`bg-white border ${statusInfo.borderColor} rounded-lg p-4 hover:shadow-md transition-all`}
+                                    >
+                                        <div className="flex items-start justify-between mb-3">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-12 h-12 rounded-full bg-cyan-600 flex items-center justify-center text-white font-bold text-lg">
+                                                    {(tourist.name || '').charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-neutral-900 font-medium">{tourist.name}</h3>
+                                                    <p className="text-xs text-neutral-500 flex items-center gap-1">
+                                                        <Globe className="w-3 h-3" />
+                                                        {tourist.nationality}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <span
+                                                className={`px-2 py-1 rounded text-xs font-medium flex items-center gap-1 ${statusInfo.bgColor} ${statusInfo.textColor}`}
+                                            >
+                                                <StatusIcon className="w-3 h-3" />
+                                                {statusInfo.label}
+                                            </span>
+                                        </div>
+
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex items-center gap-2 text-neutral-600">
+                                                <Mail className="w-4 h-4" />
+                                                <span className="truncate">{tourist.email}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-neutral-600">
+                                                <Phone className="w-4 h-4" />
+                                                <span>{tourist.phone}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2 text-neutral-600">
+                                                <Calendar className="w-4 h-4" />
+                                                <span>{tourist.tripDetails?.startDate || 'N/A'} → {tourist.tripDetails?.endDate || 'N/A'}</span>
+                                            </div>
+                                            {tourist.device_id && (
+                                                <div className="flex items-center gap-2 text-cyan-600">
+                                                    <Radio className="w-4 h-4" />
+                                                    <span>{tourist.device_id}</span>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="flex items-center gap-2 mt-4 pt-3 border-t border-neutral-200">
+                                            <button
+                                                onClick={() => viewDetails(tourist)}
+                                                className="flex-1 px-3 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 rounded-lg transition-colors flex items-center justify-center gap-1.5 text-sm"
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                                View
+                                            </button>
+                                            <button
+                                                onClick={() => switchToEdit(tourist)}
+                                                className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-cyan-600 transition-colors"
+                                            >
+                                                <Edit3 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => deleteTourist(tourist.id)}
+                                                className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-500 hover:text-red-600 transition-colors"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </>
+            ) : (
+                /* Form View */
+                <div className="bg-white border border-neutral-200 rounded-lg shadow-sm max-w-4xl mx-auto">
+                    <div className="p-6 space-y-8">
+                        {/* Personal Information */}
+                        <div>
+                            <h4 className="text-lg font-medium text-cyan-600 mb-4 flex items-center gap-2 border-b border-neutral-100 pb-2">
+                                <User className="w-5 h-5" />
+                                Personal Information
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="col-span-1 md:col-span-2">
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Full Name *</label>
+                                    <input
+                                        type="text"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="Enter full name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Email</label>
+                                    <input
+                                        type="email"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="email@example.com"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Phone *</label>
+                                    <input
+                                        type="tel"
+                                        value={formData.phone}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="+1 234 567 8900"
+                                    />
+                                </div>
+                                <div className="col-span-1 md:col-span-2">
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Nationality</label>
+                                    <input
+                                        type="text"
+                                        value={formData.nationality}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, nationality: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="Country"
+                                    />
+                                </div>
+                            </div>
                         </div>
 
-                        <div className="p-4 space-y-6">
-                            {/* Personal Information */}
-                            <div>
-                                <h4 className="text-sm font-medium text-cyan-400 mb-3 flex items-center gap-2">
-                                    <User className="w-4 h-4" />
-                                    Personal Information
-                                </h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="col-span-2">
-                                        <label className="block text-sm text-slate-300 mb-1">Full Name</label>
-                                        <input
-                                            type="text"
-                                            value={formData.name}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, name: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="Enter full name"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Email</label>
-                                        <input
-                                            type="email"
-                                            value={formData.email}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, email: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="email@example.com"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Phone</label>
-                                        <input
-                                            type="tel"
-                                            value={formData.phone}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, phone: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="+1 234 567 8900"
-                                        />
-                                    </div>
-                                    <div className="col-span-2">
-                                        <label className="block text-sm text-slate-300 mb-1">Nationality</label>
-                                        <input
-                                            type="text"
-                                            value={formData.nationality}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, nationality: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="Country"
-                                        />
-                                    </div>
+                        {/* Emergency Contact */}
+                        <div>
+                            <h4 className="text-lg font-medium text-red-600 mb-4 flex items-center gap-2 border-b border-neutral-100 pb-2">
+                                <AlertCircle className="w-5 h-5" />
+                                Emergency Contact
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Name</label>
+                                    <input
+                                        type="text"
+                                        value={formData.emergencyContactName}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="Contact name"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Phone</label>
+                                    <input
+                                        type="tel"
+                                        value={formData.emergencyContactPhone}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="Contact phone"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Relation</label>
+                                    <input
+                                        type="text"
+                                        value={formData.emergencyContactRelation}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactRelation: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black placeholder:!text-gray-500 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                        placeholder="e.g., Spouse, Parent"
+                                    />
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Emergency Contact */}
-                            <div>
-                                <h4 className="text-sm font-medium text-red-400 mb-3 flex items-center gap-2">
-                                    <AlertCircle className="w-4 h-4" />
-                                    Emergency Contact
-                                </h4>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Name</label>
-                                        <input
-                                            type="text"
-                                            value={formData.emergencyContactName}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactName: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="Contact name"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Phone</label>
-                                        <input
-                                            type="tel"
-                                            value={formData.emergencyContactPhone}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="Contact phone"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Relation</label>
-                                        <input
-                                            type="text"
-                                            value={formData.emergencyContactRelation}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, emergencyContactRelation: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                            placeholder="e.g., Spouse, Parent"
-                                        />
-                                    </div>
+                        {/* Trip Details */}
+                        <div>
+                            <h4 className="text-lg font-medium text-green-600 mb-4 flex items-center gap-2 border-b border-neutral-100 pb-2">
+                                <Calendar className="w-5 h-5" />
+                                Trip Details
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Start Date</label>
+                                    <input
+                                        type="date"
+                                        value={formData.startDate}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">End Date</label>
+                                    <input
+                                        type="date"
+                                        value={formData.endDate}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-neutral-700 mb-1">Group Size</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={formData.groupSize}
+                                        onChange={(e) => setFormData(prev => ({ ...prev, groupSize: parseInt(e.target.value) || 1 }))}
+                                        className="w-full px-4 py-2 !bg-white border border-neutral-300 rounded-lg !text-black focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
+                                    />
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Trip Details */}
+                        {/* Device Assignment */}
+                        <div>
+                            <h4 className="text-lg font-medium text-purple-600 mb-4 flex items-center gap-2 border-b border-neutral-100 pb-2">
+                                <Radio className="w-5 h-5" />
+                                Device Assignment
+                            </h4>
                             <div>
-                                <h4 className="text-sm font-medium text-green-400 mb-3 flex items-center gap-2">
-                                    <Calendar className="w-4 h-4" />
-                                    Trip Details
-                                </h4>
-                                <div className="grid grid-cols-3 gap-4">
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Start Date</label>
-                                        <input
-                                            type="date"
-                                            value={formData.startDate}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">End Date</label>
-                                        <input
-                                            type="date"
-                                            value={formData.endDate}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, endDate: e.target.value }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm text-slate-300 mb-1">Group Size</label>
-                                        <input
-                                            type="number"
-                                            min="1"
-                                            value={formData.groupSize}
-                                            onChange={(e) => setFormData(prev => ({ ...prev, groupSize: parseInt(e.target.value) || 1 }))}
-                                            className="w-full px-3 py-2 bg-slate-700/50 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Device Assignment */}
-                            <div>
-                                <h4 className="text-sm font-medium text-purple-400 mb-3 flex items-center gap-2">
-                                    <Radio className="w-4 h-4" />
-                                    Device Assignment
-                                </h4>
                                 <select
                                     value={formData.deviceId}
                                     onChange={(e) => setFormData(prev => ({ ...prev, deviceId: e.target.value }))}
-                                    className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                                    style={{ colorScheme: 'dark' }}
+                                    className="w-full px-4 py-2 bg-white border border-neutral-300 rounded-lg text-black focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:border-transparent transition-shadow"
                                 >
                                     <option value="">No device assigned</option>
                                     {availableDevices.map(device => (
-                                        <option key={device._id} value={device.deviceId}>
+                                        <option key={device.id} value={device.deviceId}>
                                             {device.deviceId} - {device.name}
                                         </option>
                                     ))}
                                 </select>
+                                <p className="text-sm text-neutral-500 mt-2">Only online and unassigned devices are shown.</p>
                             </div>
                         </div>
 
-                        <div className="flex gap-3 p-4 border-t border-slate-700 sticky bottom-0 bg-slate-800">
+                        <div className="flex gap-4 pt-6 border-t border-neutral-200">
                             <button
-                                onClick={closeDialog}
-                                className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+                                onClick={backToList}
+                                className="px-6 py-2.5 bg-white border border-neutral-300 hover:bg-neutral-50 text-neutral-700 rounded-lg transition-colors font-medium shadow-sm"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={saveTourist}
                                 disabled={!formData.name || !formData.phone}
-                                className="flex-1 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center gap-2"
+                                className="flex-1 px-6 py-2.5 bg-cyan-600 hover:bg-cyan-500 disabled:bg-neutral-300 disabled:cursor-not-allowed text-white rounded-lg transition-colors flex items-center justify-center gap-2 font-medium shadow-sm"
                             >
-                                <Save className="w-4 h-4" />
-                                {isEditing ? 'Update' : 'Register'} Tourist
+                                <Save className="w-5 h-5" />
+                                {isEditing ? 'Update Tourist Registration' : 'Complete Registration'}
                             </button>
                         </div>
                     </div>
@@ -660,68 +626,68 @@ export default function TouristRegistration() {
             {/* Details Dialog */}
             {showDetailsDialog && selectedTourist && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-                    <div className="bg-slate-800 rounded-xl border border-slate-700 w-full max-w-lg shadow-2xl">
-                        <div className="flex items-center justify-between p-4 border-b border-slate-700">
-                            <h3 className="text-lg font-semibold text-white">Tourist Details</h3>
-                            <button onClick={() => setShowDetailsDialog(false)} className="text-slate-400 hover:text-white">
+                    <div className="bg-white rounded-lg border border-neutral-200 w-full max-w-lg shadow-2xl">
+                        <div className="flex items-center justify-between p-4 border-b border-neutral-200">
+                            <h3 className="text-lg font-semibold text-neutral-900">Tourist Details</h3>
+                            <button onClick={() => setShowDetailsDialog(false)} className="text-neutral-400 hover:text-neutral-900">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
 
                         <div className="p-4 space-y-4">
                             <div className="flex items-center gap-4">
-                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center text-white font-bold text-2xl">
-                                    {selectedTourist.name.charAt(0)}
+                                <div className="w-16 h-16 rounded-full bg-cyan-600 flex items-center justify-center text-white font-bold text-2xl">
+                                    {(selectedTourist.name || '').charAt(0)}
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-bold text-white">{selectedTourist.name}</h3>
-                                    <p className="text-slate-400">{selectedTourist.nationality}</p>
+                                    <h3 className="text-xl font-bold text-neutral-900">{selectedTourist.name}</h3>
+                                    <p className="text-neutral-500">{selectedTourist.nationality}</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-700">
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-neutral-200">
                                 <div>
-                                    <p className="text-xs text-slate-500">Email</p>
-                                    <p className="text-white">{selectedTourist.email}</p>
+                                    <p className="text-xs text-neutral-500">Email</p>
+                                    <p className="text-neutral-900">{selectedTourist.email}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500">Phone</p>
-                                    <p className="text-white">{selectedTourist.phone}</p>
+                                    <p className="text-xs text-neutral-500">Phone</p>
+                                    <p className="text-neutral-900">{selectedTourist.phone}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500">Trip Dates</p>
-                                    <p className="text-white">{selectedTourist.tripDetails.startDate} → {selectedTourist.tripDetails.endDate}</p>
+                                    <p className="text-xs text-neutral-500">Trip Dates</p>
+                                    <p className="text-neutral-900">{selectedTourist.tripDetails?.startDate || 'N/A'} → {selectedTourist.tripDetails?.endDate || 'N/A'}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-slate-500">Group Size</p>
-                                    <p className="text-white">{selectedTourist.tripDetails.groupSize} person(s)</p>
+                                    <p className="text-xs text-neutral-500">Group Size</p>
+                                    <p className="text-neutral-900">{selectedTourist.tripDetails?.groupSize || 0} person(s)</p>
                                 </div>
                             </div>
 
-                            <div className="pt-4 border-t border-slate-700">
-                                <p className="text-xs text-slate-500 mb-2">Emergency Contact</p>
-                                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3">
-                                    <p className="text-white font-medium">{selectedTourist.emergencyContact.name}</p>
-                                    <p className="text-slate-400 text-sm">{selectedTourist.emergencyContact.relation}</p>
-                                    <p className="text-red-400 text-sm mt-1">{selectedTourist.emergencyContact.phone}</p>
+                            <div className="pt-4 border-t border-neutral-200">
+                                <p className="text-xs text-neutral-500 mb-2">Emergency Contact</p>
+                                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                                    <p className="text-neutral-900 font-medium">{selectedTourist.emergencyContact?.name || 'N/A'}</p>
+                                    <p className="text-neutral-600 text-sm">{selectedTourist.emergencyContact?.relation || 'N/A'}</p>
+                                    <p className="text-red-600 text-sm mt-1">{selectedTourist.emergencyContact?.phone || 'N/A'}</p>
                                 </div>
                             </div>
 
-                            {selectedTourist.device && (
-                                <div className="pt-4 border-t border-slate-700">
-                                    <p className="text-xs text-slate-500 mb-2">Assigned Device</p>
-                                    <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-3 flex items-center gap-3">
-                                        <Radio className="w-5 h-5 text-cyan-400" />
-                                        <span className="text-cyan-400 font-medium">{selectedTourist.device.deviceId}</span>
+                            {selectedTourist.device_id && (
+                                <div className="pt-4 border-t border-neutral-200">
+                                    <p className="text-xs text-neutral-500 mb-2">Assigned Device</p>
+                                    <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-3 flex items-center gap-3">
+                                        <Radio className="w-5 h-5 text-cyan-600" />
+                                        <span className="text-cyan-700 font-medium">{selectedTourist.device_id}</span>
                                     </div>
                                 </div>
                             )}
                         </div>
 
-                        <div className="p-4 border-t border-slate-700">
+                        <div className="p-4 border-t border-neutral-200">
                             <button
                                 onClick={() => setShowDetailsDialog(false)}
-                                className="w-full px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors"
+                                className="w-full px-4 py-2 bg-neutral-200 hover:bg-neutral-300 text-neutral-700 rounded-lg transition-colors"
                             >
                                 Close
                             </button>

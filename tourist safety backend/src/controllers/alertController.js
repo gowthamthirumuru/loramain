@@ -39,15 +39,13 @@ exports.getAll = asyncHandler(async (req, res) => {
 
     const total = await prisma.sOSAlert.count({ where: filter });
 
-    res.json(successResponse({
-        alerts,
-        pagination: {
-            page: parseInt(page),
-            limit: parseInt(limit),
-            total,
-            pages: Math.ceil(total / parseInt(limit))
-        }
-    }));
+    // Return flat array for frontend compatibility
+    // Include pagination in response headers if needed
+    res.set('X-Total-Count', total.toString());
+    res.set('X-Page', page.toString());
+    res.set('X-Limit', limit.toString());
+
+    res.json(successResponse(alerts));
 });
 
 /**
@@ -143,13 +141,14 @@ exports.assignTeam = asyncHandler(async (req, res) => {
         throw new ApiError(404, 'Team not found', 'NOT_FOUND');
     }
 
-    // Update Alert (assign team) - Schema missing assignedTeam field?
-    // We need to update schema to support this relationship if we want to persist it.
-    // For now, updating status only.
-
+    // Update Alert with assigned team
     const alert = await prisma.sOSAlert.update({
         where: { id },
-        data: { status: 'responding' }
+        data: {
+            status: 'responding',
+            assignedTeamId: teamId
+        },
+        include: { assignedTeam: true }
     });
 
     // Update team status

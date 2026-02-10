@@ -40,6 +40,7 @@ const touristIcon = createCustomIcon('#06b6d4');
 const teamIcon = createCustomIcon('#22c55e');
 const sosIcon = createCustomIcon('#ef4444', true);
 const anchorIcon = createCustomIcon('#8b5cf6');
+const masterIcon = createCustomIcon('#f59e0b'); // Orange for master nodes
 
 // Zone type colors
 const zoneColors: Record<string, string> = {
@@ -151,6 +152,7 @@ export function MapView() {
   const [showTourists, setShowTourists] = useState(true);
   const [showZones, setShowZones] = useState(true);
   const [showAnchors, setShowAnchors] = useState(true);
+  const [showMasters, setShowMasters] = useState(true);
   const [mapCenter, setMapCenter] = useState<[number, number]>([20.5937, 78.9629]);
   const [mapZoom, setMapZoom] = useState(5);
 
@@ -249,12 +251,16 @@ export function MapView() {
   };
 
   // Layer controls
+  const masterNodes = anchors.filter(a => a.is_master);
+  const regularAnchors = anchors.filter(a => !a.is_master);
+
   const mapLayers = [
     { id: 'incidents', label: 'SOS Alerts', count: sosMarkers.length, enabled: showIncidents, color: 'bg-red-500', toggle: () => setShowIncidents(!showIncidents) },
     { id: 'tourists', label: 'Tourists', count: tourists.length, enabled: showTourists, color: 'bg-cyan-500', toggle: () => setShowTourists(!showTourists) },
     { id: 'responders', label: 'Response Teams', count: teamMarkers.length, enabled: showTeams, color: 'bg-green-500', toggle: () => setShowTeams(!showTeams) },
     { id: 'zones', label: 'Zones', count: zones.length, enabled: showZones, color: 'bg-blue-500', toggle: () => setShowZones(!showZones) },
-    { id: 'anchors', label: 'Anchor Nodes', count: anchors.length, enabled: showAnchors, color: 'bg-purple-500', toggle: () => setShowAnchors(!showAnchors) },
+    { id: 'anchors', label: 'Anchor Nodes', count: regularAnchors.length, enabled: showAnchors, color: 'bg-purple-500', toggle: () => setShowAnchors(!showAnchors) },
+    { id: 'masters', label: 'Master Nodes', count: masterNodes.length, enabled: showMasters, color: 'bg-amber-500', toggle: () => setShowMasters(!showMasters) },
   ];
 
   return (
@@ -420,8 +426,8 @@ export function MapView() {
               </Marker>
             ))}
 
-            {/* Anchor node markers (SHOW ONLY WHEN ZOOMED IN) */}
-            {showAnchors && currentZoom >= 14 && anchors
+            {/* Anchor node markers (regular - SHOW ONLY WHEN ZOOMED IN) */}
+            {showAnchors && currentZoom >= 14 && regularAnchors
               .filter(a => a.gps_position?.lat && a.gps_position?.lng)
               .map(anchor => (
                 <Marker
@@ -435,7 +441,33 @@ export function MapView() {
                         <Radio className="w-4 h-4 text-purple-500" />
                         <span className="font-medium">{anchor.name}</span>
                       </div>
+                      <p className="text-xs text-gray-500">ID: {anchor.anchor_id}</p>
+                      <span className={`px-2 py-0.5 rounded text-xs ${anchor.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                        {anchor.status}
+                      </span>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))}
 
+            {/* Master node markers (SHOW ONLY WHEN ZOOMED IN) */}
+            {showMasters && currentZoom >= 14 && masterNodes
+              .filter(a => a.gps_position?.lat && a.gps_position?.lng)
+              .map(anchor => (
+                <Marker
+                  key={anchor.id}
+                  position={[anchor.gps_position!.lat, anchor.gps_position!.lng]}
+                  icon={masterIcon}
+                >
+                  <Popup>
+                    <div className="min-w-[150px]">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Crosshair className="w-4 h-4 text-amber-500" />
+                        <span className="font-medium">{anchor.name}</span>
+                        <span className="text-xs bg-amber-100 text-amber-700 px-1 rounded">Master</span>
+                      </div>
+                      <p className="text-xs text-gray-500">ID: {anchor.anchor_id}</p>
                       <span className={`px-2 py-0.5 rounded text-xs ${anchor.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
                         }`}>
                         {anchor.status}
@@ -610,6 +642,10 @@ export function MapView() {
               <div className="flex items-center space-x-2 text-xs text-neutral-600">
                 <div className="w-3 h-3 rounded-full bg-purple-500"></div>
                 <span>Anchor Nodes</span>
+              </div>
+              <div className="flex items-center space-x-2 text-xs text-neutral-600">
+                <div className="w-3 h-3 rounded-full bg-amber-500"></div>
+                <span>Master Nodes</span>
               </div>
             </div>
           </div>

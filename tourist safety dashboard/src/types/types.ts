@@ -159,6 +159,7 @@ export interface Anchor {
   name: string;
   local_position: { x: number; y: number };
   gps_position?: { lat: number; lng: number };
+  is_master?: boolean;
   status: string;
   last_heartbeat?: string;
 }

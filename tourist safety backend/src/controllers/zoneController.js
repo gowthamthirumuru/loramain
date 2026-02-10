@@ -18,16 +18,23 @@ exports.getAll = asyncHandler(async (req, res) => {
     const { status, type } = req.query;
 
     const filter = {};
-    if (status) filter.status = status;
+    // Convert status query to isActive filter
+    if (status === 'active') filter.isActive = true;
+    if (status === 'inactive') filter.isActive = false;
     if (type) filter.type = type;
 
     const zones = await prisma.zone.findMany({
         where: filter,
         orderBy: { createdAt: 'desc' }
-        // Note: 'createdBy' relation not in current schema, skipping populate
     });
 
-    res.json(successResponse(zones));
+    // Add status string field for frontend compatibility
+    const zonesWithStatus = zones.map(zone => ({
+        ...zone,
+        status: zone.isActive ? 'active' : 'inactive'
+    }));
+
+    res.json(zonesWithStatus);
 });
 
 /**
@@ -57,10 +64,27 @@ exports.getById = asyncHandler(async (req, res) => {
  *     tags: [Zones]
  */
 exports.create = asyncHandler(async (req, res) => {
-    const { name, type, description, boundary, center, radius, color, alertSettings } = req.body;
+    const { name, type, description, boundary, center, radius, color, alertSettings, riskLevel } = req.body;
 
-    if (!name || !center) {
-        throw new ApiError(400, 'Name and center coordinates are required');
+    if (!name) {
+        throw new ApiError(400, 'Zone name is required');
+    }
+
+    // Calculate center from boundary if not provided
+    let calculatedCenter = center;
+    if (!calculatedCenter && boundary?.coordinates?.[0]) {
+        const coords = boundary.coordinates[0];
+        const latSum = coords.reduce((sum, c) => sum + c[1], 0);
+        const lngSum = coords.reduce((sum, c) => sum + c[0], 0);
+        calculatedCenter = {
+            latitude: latSum / coords.length,
+            longitude: lngSum / coords.length
+        };
+    }
+
+    // Default center if still not available
+    if (!calculatedCenter) {
+        calculatedCenter = { latitude: 20.5937, longitude: 78.9629 }; // India center
     }
 
     const zone = await prisma.zone.create({
@@ -71,21 +95,26 @@ exports.create = asyncHandler(async (req, res) => {
             boundary: boundary || {
                 type: 'Polygon',
                 coordinates: [[
-                    [center.longitude - 0.01, center.latitude - 0.01],
-                    [center.longitude + 0.01, center.latitude - 0.01],
-                    [center.longitude + 0.01, center.latitude + 0.01],
-                    [center.longitude - 0.01, center.latitude + 0.01],
-                    [center.longitude - 0.01, center.latitude - 0.01]
+                    [calculatedCenter.longitude - 0.01, calculatedCenter.latitude - 0.01],
+                    [calculatedCenter.longitude + 0.01, calculatedCenter.latitude - 0.01],
+                    [calculatedCenter.longitude + 0.01, calculatedCenter.latitude + 0.01],
+                    [calculatedCenter.longitude - 0.01, calculatedCenter.latitude + 0.01],
+                    [calculatedCenter.longitude - 0.01, calculatedCenter.latitude - 0.01]
                 ]]
             },
-            center,
-            radius: radius || 500,
-            color,
-            alerts: alertSettings, // Mapped to 'alerts' in schema
+            center: calculatedCenter,
+            color: color || '#3388ff',
+            alerts: alertSettings,
         }
     });
 
-    res.status(201).json(successResponse(zone, 'Zone created'));
+    // Add status field for frontend compatibility
+    const responseZone = {
+        ...zone,
+        status: zone.isActive ? 'active' : 'inactive'
+    };
+
+    res.status(201).json(successResponse(responseZone, 'Zone created'));
 });
 
 /**

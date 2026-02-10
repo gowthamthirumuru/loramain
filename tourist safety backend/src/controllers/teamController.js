@@ -23,7 +23,8 @@ exports.getAll = asyncHandler(async (req, res) => {
         orderBy: { name: 'asc' }
     });
 
-    res.json(successResponse({ count: teams.length, teams }));
+    // Return flat array for frontend compatibility
+    res.json(successResponse(teams));
 });
 
 /**
@@ -34,7 +35,7 @@ exports.getAvailable = asyncHandler(async (req, res) => {
     const teams = await prisma.responseTeam.findMany({
         where: { status: 'available' }
     });
-    res.json(successResponse({ count: teams.length, teams }));
+    res.json(successResponse(teams));
 });
 
 /**
