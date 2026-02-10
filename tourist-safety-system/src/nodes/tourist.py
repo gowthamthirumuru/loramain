@@ -121,6 +121,15 @@ class TouristNode:
             except:
                 pass
 
+
+def run_tourist(device_id=None, test_mode=False):
+    """
+    Run the tourist node.
+    """
+    tourist = TouristNode(device_id=device_id, test_mode=test_mode)
+    tourist.run()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Tourist Device")
     parser.add_argument("--test-sos", action="store_true", help="Run in SOS test mode")
@@ -128,5 +137,4 @@ if __name__ == "__main__":
     
     args = parser.parse_args()
     
-    tourist = TouristNode(device_id=args.device_id, test_mode=args.test_sos)
-    tourist.run()
+    run_tourist(device_id=args.device_id, test_mode=args.test_sos)

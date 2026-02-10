@@ -335,6 +335,14 @@ class MasterNode:
     def _print_waiting(self):
         print(f"\n{Colors.DIM}⏳ Waiting for signals...{Colors.RESET}", end='\r')
 
-if __name__ == "__main__":
+
+def run_master():
+    """
+    Run the master node.
+    """
     node = MasterNode()
     node.start()
+
+
+if __name__ == "__main__":
+    run_master()
