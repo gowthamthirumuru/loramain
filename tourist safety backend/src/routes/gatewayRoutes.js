@@ -11,7 +11,7 @@ const { gatewayLimiter } = require('../middleware/rateLimiter');
 router.use(authenticateGateway);
 
 // POST /api/gateway/heartbeat - Gateway status ping
-router.post('/heartbeat', gatewayController.heartbeat);
+router.post('/heartbeat', gatewayLimiter, gatewayController.heartbeat);
 
 // POST /api/gateway/batch-update - Bulk location updates
 router.post('/batch-update', gatewayLimiter, gatewayController.batchUpdate);
@@ -23,7 +23,7 @@ router.get('/config', gatewayController.getConfig);
 router.get('/anchors', gatewayController.getAllAnchors);
 
 // POST /api/gateway/anchors - Register/update anchor
-router.post('/anchors', gatewayController.registerAnchor);
+router.post('/anchors', gatewayLimiter, gatewayController.registerAnchor);
 
 // PUT /api/gateway/anchors/:id/status - Update anchor status
 router.put('/anchors/:id/status', gatewayController.updateAnchorStatus);

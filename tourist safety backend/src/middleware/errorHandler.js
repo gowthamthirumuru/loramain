@@ -33,10 +33,7 @@ const errorHandler = (err, req, res, next) => {
         console.error(`  Stack: ${err.stack}`);
     }
 
-    // Handle specific error types
-    // Handle specific error types
-
-    // Prisma Error Handling
+    // --- Prisma Error Handling ---
     if (err.code) {
         // P2002: Unique constraint failed
         if (err.code === 'P2002') {
@@ -48,7 +45,7 @@ const errorHandler = (err, req, res, next) => {
         // P2025: Record not found
         else if (err.code === 'P2025') {
             statusCode = 404;
-            code = 'NOT_FOUND'; // Or RESOURCE_NOT_FOUND
+            code = 'NOT_FOUND';
             message = 'Requested resource not found';
         }
         // P2003: Foreign key constraint failed
@@ -57,8 +54,16 @@ const errorHandler = (err, req, res, next) => {
             code = 'CONSTRAINT_VIOLATION';
             message = 'Invalid reference to related record';
         }
+        // P1000-P1017: Database connection errors
+        else if (err.code.startsWith('P10')) {
+            statusCode = 503;
+            code = 'DATABASE_UNAVAILABLE';
+            message = 'Service temporarily unavailable (Database connection)';
+            console.error('CRITICAL: Database connection failure:', err.code);
+        }
     }
 
+    // --- JWT Errors ---
     if (err.name === 'JsonWebTokenError') {
         statusCode = 401;
         code = 'INVALID_TOKEN';
@@ -69,6 +74,18 @@ const errorHandler = (err, req, res, next) => {
         statusCode = 401;
         code = 'TOKEN_EXPIRED';
         message = 'Authentication token expired';
+    }
+
+    // --- Validation Errors (Joi/Zod if used) ---
+    if (err.isJoi) {
+        statusCode = 400;
+        code = 'VALIDATION_ERROR';
+        message = err.details[0].message;
+    }
+
+    // --- Safety for Production ---
+    if (process.env.NODE_ENV === 'production' && statusCode === 500) {
+        message = 'An unexpected error occurred';
     }
 
     // Send error response

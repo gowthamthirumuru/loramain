@@ -5,6 +5,7 @@
 const router = require('express').Router();
 const emergencyController = require('../controllers/emergencyController');
 const { validateObjectId } = require('../middleware/validator');
+const { sosLimiter } = require('../middleware/rateLimiter');
 
 // GET /api/emergencies - Get all emergencies
 router.get('/', emergencyController.getAll);
@@ -13,7 +14,7 @@ router.get('/', emergencyController.getAll);
 router.get('/:id', validateObjectId('id'), emergencyController.getById);
 
 // POST /api/emergencies - Create new emergency
-router.post('/', emergencyController.create);
+router.post('/', sosLimiter, emergencyController.create);
 
 // PATCH /api/emergencies/:id/status - Update emergency status
 router.patch('/:id/status', validateObjectId('id'), emergencyController.updateStatus);
