@@ -4,7 +4,8 @@ import os
 
 # --- 1. Environment Detection ---
 # Check if we are running on a Raspberry Pi or a Windows Laptop
-IS_RASPBERRY_PI = platform.system() == "Linux" and "aarch" in platform.machine()
+# Check if we are running on a Raspberry Pi (supports both 32-bit 'arm' and 64-bit 'aarch')
+IS_RASPBERRY_PI = platform.system() == "Linux" and ("aarch" in platform.machine() or "arm" in platform.machine())
 # Note: On a real Pi, platform.machine() usually contains 'arm' or 'aarch'.
 # If you are on standard Linux desktop, we might need a stricter check, 
 # but for Windows vs Pi, this is usually sufficient.
