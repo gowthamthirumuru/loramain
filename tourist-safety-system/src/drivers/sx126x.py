@@ -272,23 +272,24 @@ class sx126x:
             time.sleep(0.1)  # Wait for full packet
             r_buff = self.ser.read(self.ser.inWaiting())
             
-            # Need at least 5 bytes (3-byte header + 1 char + RSSI)
-            if len(r_buff) < 5:
+            # Need at least 2 bytes (1 payload char + RSSI byte)
+            if len(r_buff) < 2:
                 return None, None
             
-            # RSSI is the LAST byte
+            # RSSI is the LAST byte appended by the E22 module
             # Formula: -(256 - value) to convert to dBm
             raw_rssi = r_buff[-1]
             rssi_val = -(256 - raw_rssi)
             
-            # MESSAGE is everything EXCEPT:
-            #   - First 3 bytes: fixed-mode address header [ADDR_H, ADDR_L, CH]
-            #   - Last byte: RSSI
+            # MESSAGE is everything EXCEPT the last byte (RSSI)
+            # Note: In Fixed Mode (REG3 bit6=1), the E22 hardware already
+            # strips the 3-byte address header [ADDR_H, ADDR_L, CH] before
+            # outputting to serial, so we only need to remove the RSSI byte.
             try:
-                msg_data = r_buff[3:-1]
+                msg_data = r_buff[:-1]
                 msg = msg_data.decode('utf-8', errors='ignore')
             except Exception:
-                msg = str(r_buff[3:-1])
+                msg = str(r_buff[:-1])
             
             return msg, rssi_val
         else:
