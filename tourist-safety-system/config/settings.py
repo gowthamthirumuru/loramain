@@ -74,6 +74,6 @@ GATEWAY_API_KEY = os.environ.get('GATEWAY_API_KEY', 'my-secret-key-12345')
 # This is used to convert local X,Y coordinates to GPS lat/lng
 # UPDATE THESE with actual GPS coordinates of your master anchor!
 GPS_REFERENCE = {
-    "lat": -51.95392379,   # Latitude of MASTER anchor
-    "lng": 46.97799013    # Longitude of MASTER anchor
+    "lat": 11.0168,   # Latitude of MASTER anchor (UPDATE with your actual GPS!)
+    "lng": 76.9558    # Longitude of MASTER anchor (UPDATE with your actual GPS!)
 }

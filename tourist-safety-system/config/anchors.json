@@ -4,23 +4,23 @@
         "x": 0.0,
         "y": 0.0,
         "role": "master",
-        "gps_lat": -51.95392379,
-        "gps_lng": 46.97799013
+        "gps_lat": 11.0168,
+        "gps_lng": 76.9558
     },
     "ANCHOR_2": {
         "id": "node_relay_1",
         "x": 4.0,
         "y": 2.0,
         "role": "relay",
-        "gps_lat": -51.9539058,
-        "gps_lng": 46.97804843
+        "gps_lat": 11.016818,
+        "gps_lng": 76.955836
     },
     "ANCHOR_3": {
         "id": "node_relay_2",
         "x": 5.99,
         "y": 0.0,
         "role": "relay",
-        "gps_lat": -51.95392379,
-        "gps_lng": 46.97807758
+        "gps_lat": 11.0168,
+        "gps_lng": 76.955854
     }
 }

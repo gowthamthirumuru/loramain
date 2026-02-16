@@ -88,7 +88,7 @@ exports.batchUpdate = asyncHandler(async (req, res) => {
 
     for (const loc of locations) {
         try {
-            const { device_id, lat, lng, rssi, sos_flag, timestamp } = loc;
+            const { device_id, x, y, lat, lng, rssi, sos_flag, timestamp } = loc;
 
             // Find tourist
             const tourist = await prisma.tourist.findUnique({
@@ -108,8 +108,8 @@ exports.batchUpdate = asyncHandler(async (req, res) => {
                     tourist_id: tourist.id,
                     lat: parseFloat(lat),
                     lng: parseFloat(lng),
-                    x: 0, // Fallback if not provided
-                    y: 0, // Fallback
+                    x: parseFloat(x) || 0,
+                    y: parseFloat(y) || 0,
                     rssi: parseFloat(rssi),
                     is_sos: sos_flag || false,
                     timestamp: timestamp ? new Date(timestamp) : new Date()
@@ -118,7 +118,7 @@ exports.batchUpdate = asyncHandler(async (req, res) => {
 
             // Update tourist status
             let updateData = {
-                last_location: { lat, lng },
+                last_location: { x: parseFloat(x) || 0, y: parseFloat(y) || 0, lat, lng },
                 last_seen: new Date()
             };
 
@@ -152,6 +152,8 @@ exports.batchUpdate = asyncHandler(async (req, res) => {
                 io.emit(SOCKET_EVENTS.LOCATION_UPDATE, {
                     tourist_id: updatedTourist.id,
                     name: updatedTourist.name,
+                    x: parseFloat(x) || 0,
+                    y: parseFloat(y) || 0,
                     lat,
                     lng,
                     status: updatedTourist.status,

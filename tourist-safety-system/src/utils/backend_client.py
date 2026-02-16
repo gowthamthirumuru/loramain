@@ -164,6 +164,8 @@ class BackendClient:
             )
             converted.append({
                 "device_id": loc['device_id'],
+                "x": loc.get('x', 0),
+                "y": loc.get('y', 0),
                 "lat": lat,
                 "lng": lng,
                 "rssi": loc.get('rssi', -70),

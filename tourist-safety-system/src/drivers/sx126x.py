@@ -272,8 +272,8 @@ class sx126x:
             time.sleep(0.1)  # Wait for full packet
             r_buff = self.ser.read(self.ser.inWaiting())
             
-            # Need at least 2 bytes (1 char + RSSI)
-            if len(r_buff) < 2:
+            # Need at least 5 bytes (3-byte header + 1 char + RSSI)
+            if len(r_buff) < 5:
                 return None, None
             
             # RSSI is the LAST byte
@@ -281,12 +281,14 @@ class sx126x:
             raw_rssi = r_buff[-1]
             rssi_val = -(256 - raw_rssi)
             
-            # MESSAGE is everything EXCEPT the last byte (RSSI)
+            # MESSAGE is everything EXCEPT:
+            #   - First 3 bytes: fixed-mode address header [ADDR_H, ADDR_L, CH]
+            #   - Last byte: RSSI
             try:
-                msg_data = r_buff[:-1]
+                msg_data = r_buff[3:-1]
                 msg = msg_data.decode('utf-8', errors='ignore')
             except Exception:
-                msg = str(r_buff[:-1])
+                msg = str(r_buff[3:-1])
             
             return msg, rssi_val
         else:
