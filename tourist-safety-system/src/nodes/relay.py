@@ -70,8 +70,9 @@ def run_relay(relay_id=None):
             if message:
                 print(f"[{relay_id}] 📥 Received: {message} | RSSI: {rssi} dBm")
                 
-                # Only respond to PING or SOS from tourists
-                if "PING" in message or "SOS" in message:
+                # Only respond to PING or SOS from tourists (NOT other relays' REPORTs)
+                # REPORT messages contain "PING"/"SOS" as substring, so exclude them
+                if ("PING" in message or "SOS" in message) and "REPORT" not in message:
                     pings_received += 1
                     
                     # Extract Tourist ID

@@ -174,23 +174,14 @@ class MasterNode:
             self.flush_buffer()
 
     def process_message(self, msg, rssi):
-        # Direct PING/SOS
-        if "PING" in msg or "SOS" in msg:
-            self.current_readings["MASTER"] = rssi
-            self.last_ping_time = time.time()
-            
-            try:
-                parts = msg.split(":")
-                if len(parts) >= 2:
-                    self.current_device_id = parts[1].strip().upper()
-                self.is_sos = "SOS" in msg
-            except:
-                self.current_device_id = "UNKNOWN"
+        # IMPORTANT: Check REPORT first! REPORT messages contain "PING"/"SOS"
+        # as a substring (e.g., "REPORT:ANCHOR_2:DEV001:-65:PING"), so checking
+        # "PING" in msg first would incorrectly match REPORTs as direct pings.
         
         # Relay REPORT
-        elif "REPORT" in msg:
+        if "REPORT" in msg:
             try:
-                # Format: "REPORT:ANCHOR_ID:TOURIST_ID:RSSI"
+                # Format: "REPORT:ANCHOR_ID:TOURIST_ID:RSSI:MSG_TYPE"
                 parts = msg.split(":")
                 
                 if len(parts) >= 4:
@@ -228,6 +219,19 @@ class MasterNode:
                          self.current_readings[sender_anchor_id] = reported_rssi
             except Exception as e:
                 print(f"{Colors.RED}Error parsing report: {e}{Colors.RESET}")
+        
+        # Direct PING/SOS from tourist device
+        elif "PING" in msg or "SOS" in msg:
+            self.current_readings["MASTER"] = rssi
+            self.last_ping_time = time.time()
+            
+            try:
+                parts = msg.split(":")
+                if len(parts) >= 2:
+                    self.current_device_id = parts[1].strip().upper()
+                self.is_sos = "SOS" in msg
+            except:
+                self.current_device_id = "UNKNOWN"
 
     def perform_trilateration(self):
         self.total_positions += 1
