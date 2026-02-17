@@ -264,11 +264,18 @@ export const useDashboardStore = create<DashboardStore>()(
                         anchorsApi.getAll(),
                         dashboardApi.getMetrics()
                     ]);
+
+                    // Map backend `last_location` field to frontend `location` field
+                    const mappedTourists = toArray(touristsRes).map((t: any) => ({
+                        ...t,
+                        location: t.location || t.last_location || undefined,
+                    }));
+
                     set({
                         alerts: toArray(alertsRes),
                         emergencies: toArray(emergenciesRes),
                         teams: toArray(teamsRes),
-                        tourists: toArray(touristsRes),
+                        tourists: mappedTourists,
                         anchors: toArray(anchorsRes),
                         metrics
                     });

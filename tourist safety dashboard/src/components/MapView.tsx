@@ -368,8 +368,8 @@ export function MapView() {
               />
             ))}
 
-            {/* Tourist markers (SHOW ONLY WHEN ZOOMED IN) */}
-            {showTourists && currentZoom >= 14 && tourists
+            {/* Tourist markers */}
+            {showTourists && tourists
               .filter(t => t.location?.lat && t.location?.lng)
               .map(tourist => (
                 <Marker

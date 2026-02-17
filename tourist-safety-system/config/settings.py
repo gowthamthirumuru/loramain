@@ -40,11 +40,11 @@ SERIAL_PORT = "/dev/ttyS0"
 # 2.0 = Open Space (Line of Sight)
 # 3.0 = Urban / Trees / Light obstacles
 # 4.0 = Indoor / Walls / Heavy obstacles (USE THIS FOR ROOM TESTING!)
-ENV_FACTOR_N = 2.2 # ← CHANGED FOR INDOOR TESTING
+ENV_FACTOR_N = 1.79 # ← CHANGED FOR INDOOR TESTING
 
 # Measured RSSI at 1 meter distance 
 # CALIBRATED: Measured -15 dBm at exactly 1 meter (2026-01-27)
-RSSI_AT_1M = -15  # ← Updated based on real measurement 
+RSSI_AT_1M = -24  # ← Updated based on real measurement 
 
 # --- 5. Load Anchors ---
 def get_anchors():
@@ -75,6 +75,6 @@ GATEWAY_API_KEY = os.environ.get('GATEWAY_API_KEY', 'my-secret-key-12345')
 # This is used to convert local X,Y coordinates to GPS lat/lng
 # UPDATE THESE with actual GPS coordinates of your master anchor!
 GPS_REFERENCE = {
-    "lat": 11.0168,   # Latitude of MASTER anchor (UPDATE with your actual GPS!)
-    "lng": 76.9558    # Longitude of MASTER anchor (UPDATE with your actual GPS!)
+    "lat": 53.03016648,   # Latitude of MASTER anchor
+    "lng": -128.61710038    # Longitude of MASTER anchor
 }
