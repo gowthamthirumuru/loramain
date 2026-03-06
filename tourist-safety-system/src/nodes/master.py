@@ -11,7 +11,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../'
 from src.drivers.sx126x import sx126x
 from src.utils.math_helper import MathEngine
 from src.utils.backend_client import BackendClient
-from config.settings import get_anchors, SERIAL_PORT, LORA_SETTINGS, IS_RASPBERRY_PI
+from config.settings import get_anchors, SERIAL_PORT, LORA_SETTINGS
+import RPi.GPIO as GPIO
 
 # ANSI Color Codes for terminal output
 class Colors:
@@ -93,16 +94,12 @@ class MasterNode:
         freq = LORA_SETTINGS.get("FREQUENCY", 865)
         print(f"{Colors.DIM}Initializing LoRa at {freq} MHz...{Colors.RESET}")
         
-        if IS_RASPBERRY_PI:
-            try:
-                lora = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=1, power=22, rssi=True)
-                print(f"{Colors.GREEN}✓ LoRa hardware initialized{Colors.RESET}")
-                return lora
-            except Exception as e:
-                print(f"{Colors.RED}✗ LoRa init failed: {e}{Colors.RESET}")
-                return None
-        else:
-            print(f"{Colors.YELLOW}⚠ Running in simulation mode (not on Pi){Colors.RESET}")
+        try:
+            lora = sx126x(serial_num=SERIAL_PORT, freq=freq, addr=1, power=22, rssi=True)
+            print(f"{Colors.GREEN}✓ LoRa hardware initialized{Colors.RESET}")
+            return lora
+        except Exception as e:
+            print(f"{Colors.RED}✗ LoRa init failed: {e}{Colors.RESET}")
             return None
 
     def start(self):
@@ -337,12 +334,10 @@ class MasterNode:
         self.is_sos = False
 
     def cleanup(self):
-        if IS_RASPBERRY_PI:
-            try:
-                import RPi.GPIO as GPIO
-                GPIO.cleanup()
-            except:
-                pass
+        try:
+            GPIO.cleanup()
+        except:
+            pass
 
     # --- UI Helpers ---
     def _print_status(self, anchors_received, total=3):

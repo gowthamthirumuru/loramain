@@ -6,8 +6,10 @@ from unittest.mock import MagicMock, patch
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-# Mock sx126x driver before importing master node
+# Mock sx126x driver and RPi.GPIO before importing master node
 sys.modules['src.drivers.sx126x'] = MagicMock()
+sys.modules['RPi'] = MagicMock()
+sys.modules['RPi.GPIO'] = MagicMock()
 
 from src.nodes.master import MasterNode
 
@@ -18,9 +20,7 @@ class TestMasterNodeUnit(unittest.TestCase):
         self.backend_patcher = patch('src.nodes.master.BackendClient')
         self.MockBackend = self.backend_patcher.start()
         
-        # Patch settings (IS_RASPBERRY_PI to False to avoid hardware init)
-        self.settings_patcher = patch('src.nodes.master.IS_RASPBERRY_PI', False)
-        self.settings_patcher.start()
+        # Remove IS_RASPBERRY_PI patch since we mock RPi.GPIO directly
         
         # Patch anchors
         self.anchors_patcher = patch('src.nodes.master.get_anchors', return_value={
@@ -36,7 +36,6 @@ class TestMasterNodeUnit(unittest.TestCase):
     
     def tearDown(self):
         self.backend_patcher.stop()
-        self.settings_patcher.stop()
         self.anchors_patcher.stop()
     
     def test_process_message_ping(self):

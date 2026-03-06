@@ -7,24 +7,24 @@ from hypothesis import given, strategies as st, settings
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 
-# Mock sx126x driver before importing tourist node
+# Mock sx126x driver and RPi.GPIO before importing tourist node
 sys.modules['src.drivers.sx126x'] = MagicMock()
+sys.modules['RPi'] = MagicMock()
+sys.modules['RPi.GPIO'] = MagicMock()
 
 from src.nodes.tourist import TouristNode
 
 class TestTouristNodeProperty(unittest.TestCase):
     
     def setUp(self):
-        # Patch settings (IS_RASPBERRY_PI to False)
-        self.settings_patcher = patch('src.nodes.tourist.IS_RASPBERRY_PI', False)
-        self.settings_patcher.start()
+        # Setting patch removed since we mock RPi.GPIO directly
         
         self.node = TouristNode(device_id="TEST_DEV")
         # Mock the internal node object to capture sends
         self.node.node = MagicMock()
 
     def tearDown(self):
-        self.settings_patcher.stop()
+        pass
 
     @given(st.booleans())
     def test_message_format(self, is_sos):
