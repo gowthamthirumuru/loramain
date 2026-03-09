@@ -1,0 +1,4 @@
+# file: a:\loramain\tourist-safety-system\config\settings.py
+# hypothesis_version: 6.151.5
+
+[-128.61710038, 3.0, 53.03016648, 125.0, 865, '/dev/ttyS0', 'BACKEND_URL', 'BANDWIDTH', 'BUSY', 'CODING_RATE', 'CS', 'DIO1', 'FREQUENCY', 'GATEWAY_API_KEY', 'MISO', 'MOSI', 'RESET', 'SCK', 'SPREADING_FACTOR', 'TX_POWER', '__main__', 'anchors.json', 'config', 'lat', 'lng', 'my-secret-key-12345', 'r']
