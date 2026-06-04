@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/Frontend-React%20%7C%20Vite-blue?style=for-the-badge&logo=react)](./frontend)
 [![Node.js](https://img.shields.io/badge/Backend-Node.js%20%7C%20Express-green?style=for-the-badge&logo=node.js)](./backend)
 [![Python](https://img.shields.io/badge/Hardware-Python%20%7C%20LoRa-blueviolet?style=for-the-badge&logo=python)](./lora-node)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 
 *Real-time localization, SOS alerts, and offline mesh networking where cellular coverage fails.*
 
