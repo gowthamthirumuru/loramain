@@ -1,4 +1,0 @@
-# file: a:\loramain\tourist-safety-system\src\nodes\tourist.py
-# hypothesis_version: 6.151.5
-
-[100, 865, '\x1b[0m', '\x1b[1m', '\x1b[2m', '\x1b[91m', '\x1b[92m', '\x1b[93m', '\x1b[96m', '--device-id', '--test-sos', '../../', 'DEV001', 'DEVICE_ID', 'FREQUENCY', 'Override device ID', 'PING', 'Run in SOS test mode', 'SOS', 'Tourist Device', '__main__', 'clear', 'cls', 'nt', 'store_true']

@@ -1,4 +1,0 @@
-# file: a:\loramain\tourist-safety-system\src\utils\backend_client.py
-# hypothesis_version: 6.151.5
-
-[30.0, 50.0, 200, 201, 401, 404, '../../', 'Content-Type', 'DEV001', 'MASTER', 'X-API-Key', '__main__', 'anchor_id', 'application/json', 'data', 'device_id', 'failed', 'gps_position', 'is_master', 'lat', 'lng', 'local_position', 'locations', 'name', 'processed', 'rssi', 'sos_flag', 'stats', 'timestamp', 'x', 'y']
