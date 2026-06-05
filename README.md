@@ -40,11 +40,11 @@ The **Tourist Safety System** is a complete hardware and software solution desig
 
 ## ✨ Features
 
-- **📡 Completely Offline Tracking:** Operates entirely independently of cellular and internet networks.
-- **📍 Real-Time Trilateration:** Calculates accurate X/Y coordinates using RSSI-based distance estimation.
-- **🚨 Instant SOS Alerts:** Immediate distress signal broadcasting with high-priority routing to the dashboard.
-- **🗺️ Interactive Dashboard:** A beautiful, responsive React-based interface for park rangers to monitor all active nodes.
-- **🔋 Low Power Consumption:** Optimized hardware nodes meant to run on battery power for extended periods.
+- ** Completely Offline Tracking:** Operates entirely independently of cellular and internet networks.
+- ** Real-Time Trilateration:** Calculates accurate X/Y coordinates using RSSI-based distance estimation.
+- ** Instant SOS Alerts:** Immediate distress signal broadcasting with high-priority routing to the dashboard.
+- ** Interactive Dashboard:** A beautiful, responsive React-based interface for park rangers to monitor all active nodes.
+- ** Low Power Consumption:** Optimized hardware nodes meant to run on battery power for extended periods.
 
 ---
 
