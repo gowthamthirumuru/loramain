@@ -163,7 +163,7 @@ python main.py --mode master
 
 ---
 
-## 🎮 Usage
+##  Usage
 
 - **Simulate Data:** If you do not have physical LoRa nodes, use the backend API simulation endpoints (detailed in the backend README) to mock tourist movements and trigger SOS alerts.
 - **Monitor the Map:** Open the frontend dashboard to watch simulated or real trackers move in real-time.
