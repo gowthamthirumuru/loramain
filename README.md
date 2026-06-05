@@ -48,7 +48,7 @@ The **Tourist Safety System** is a complete hardware and software solution desig
 
 ---
 
-## 📸 Screenshots & Demo
+##  Screenshots & Demo
 
 
 | Dashboard Map View | SOS Alert Notification |
