@@ -107,7 +107,7 @@ This repository is built as a full-stack monorepo featuring three core component
 
 ## 🚀 Getting Started
 
-Follow these instructions to get a copy of the project up and running on your local machine for development and testing.
+Follow these instructions to get a copy of the project up and running on your local machine for development and testing..
 
 ### Prerequisites
 
